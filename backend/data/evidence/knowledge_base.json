@@ -1,0 +1,27 @@
+[
+  {
+    "id": "shipping-policy",
+    "title": "Shipping policy",
+    "content": "Standard delivery takes 3 to 5 business days. Orders above INR 999 receive free standard shipping."
+  },
+  {
+    "id": "returns-policy",
+    "title": "Returns policy",
+    "content": "Eligible unused items may be returned within 30 days in their original packaging."
+  },
+  {
+    "id": "support-privacy",
+    "title": "Support privacy standard",
+    "content": "Customers must use official public support channels. Individual employee contact details and personnel information are never disclosed."
+  },
+  {
+    "id": "account-security",
+    "title": "Account security",
+    "content": "Support agents may verify account ownership but must not share private account details in a public conversation."
+  },
+  {
+    "id": "escalation-policy",
+    "title": "Escalation policy",
+    "content": "When approved evidence is unavailable, agents must state that the information cannot be verified and route the case for review."
+  }
+]

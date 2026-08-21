@@ -1,0 +1,41 @@
+{
+  "customer_support": {
+    "label": "Customer support",
+    "version": "2026.1",
+    "description": "Fast, customer-facing responses with conservative privacy controls.",
+    "max_latency_ms": 700,
+    "max_token_count": 350,
+    "minimum_groundedness_score": 0.42,
+    "unsupported_claim_action": "AUTO_EDIT",
+    "insufficient_evidence_action": "FLAG_FOR_HUMAN_REVIEW",
+    "unsafe_content_action": "FLAG_FOR_HUMAN_REVIEW",
+    "pii_action": "BLOCK",
+    "cost_overrun_action": "FLAG_FOR_HUMAN_REVIEW"
+  },
+  "internal_knowledge_assistant": {
+    "label": "Internal knowledge assistant",
+    "version": "2026.1",
+    "description": "Balanced controls for internal, evidence-backed assistance.",
+    "max_latency_ms": 1300,
+    "max_token_count": 850,
+    "minimum_groundedness_score": 0.55,
+    "unsupported_claim_action": "FLAG_FOR_HUMAN_REVIEW",
+    "insufficient_evidence_action": "FLAG_FOR_HUMAN_REVIEW",
+    "unsafe_content_action": "FLAG_FOR_HUMAN_REVIEW",
+    "pii_action": "BLOCK",
+    "cost_overrun_action": "FLAG_FOR_HUMAN_REVIEW"
+  },
+  "decision_support": {
+    "label": "Decision support",
+    "version": "2026.1",
+    "description": "High-stakes profile that prioritises evidence and safety over speed.",
+    "max_latency_ms": 2200,
+    "max_token_count": 1400,
+    "minimum_groundedness_score": 0.70,
+    "unsupported_claim_action": "BLOCK",
+    "insufficient_evidence_action": "BLOCK",
+    "unsafe_content_action": "BLOCK",
+    "pii_action": "BLOCK",
+    "cost_overrun_action": "FLAG_FOR_HUMAN_REVIEW"
+  }
+}
