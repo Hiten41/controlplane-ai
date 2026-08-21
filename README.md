@@ -151,6 +151,12 @@ python -m uvicorn app.main:app --reload --port 8000
 
 The API will be available at `http://127.0.0.1:8000`; interactive API documentation is at `http://127.0.0.1:8000/docs`.
 
+For a deployed frontend, add its URL as a comma-separated backend environment variable:
+
+```env
+ALLOWED_ORIGINS=https://your-frontend.onrender.com
+```
+
 ### 2. Start the React frontend
 
 Open another terminal:
