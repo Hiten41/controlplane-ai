@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
+import { demoPolicies, demoScenarios } from "./demoCatalog";
 import type { Audit, Check, Evaluation, Policy, Scenario, Telemetry, UseCase } from "./types";
 
 const useCaseOrder: UseCase[] = ["customer_support", "internal_knowledge_assistant", "decision_support"];
@@ -62,8 +63,8 @@ function numberOrZero(value: string) {
 }
 
 function App() {
-  const [policies, setPolicies] = useState<Record<UseCase, Policy> | null>(null);
-  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [policies, setPolicies] = useState<Record<UseCase, Policy> | null>(demoPolicies);
+  const [scenarios, setScenarios] = useState<Scenario[]>(demoScenarios);
   const [useCase, setUseCase] = useState<UseCase>("customer_support");
   const [scenarioId, setScenarioId] = useState("clean_answer");
   const [customPrompt, setCustomPrompt] = useState("How long will delivery take?");
@@ -86,6 +87,11 @@ function App() {
     [scenarioId, scenarios],
   );
   const activePolicy = policies?.[useCase];
+  const releasePreview = result
+    ? { title: pretty(result.decision), detail: releaseCopy(result.release_status), state: result.decision.toLowerCase() }
+    : isEvaluating
+      ? { title: "Checks in progress", detail: "The response remains held until every check completes.", state: "evaluating" }
+      : { title: "Ready for a decision", detail: "Response is held until checks finish.", state: "ready" };
 
   async function refreshRecords() {
     const [nextAudits, nextReviews] = await Promise.all([api.getAudits(), api.getReviews()]);
@@ -104,7 +110,7 @@ function App() {
       setError("");
     } catch {
       setApiStatus("unavailable");
-      setError("Unable to reach the ControlPlane API. On Render's free tier, the first request after inactivity can take up to 60 seconds. Please wait, then retry.");
+      setError("The live policy engine is reconnecting. The demo policies and test cases are ready; allow up to 60 seconds for the free Render service, then retry evaluation.");
     }
   }
 
@@ -195,7 +201,7 @@ function App() {
           <div className="hero__badge"><span className={`pulse pulse--${apiStatus}`}></span><div><small>Demo engine status</small><strong>{apiStatus === "ready" ? "Policy engine online" : apiStatus === "checking" ? "Connecting to API" : "API reconnect needed"}</strong></div><b>3</b></div>
           <div className="release-preview">
             <div className="release-preview__head"><span>LIVE EVALUATION</span><b>CP / 042</b></div>
-            <div className="release-preview__state"><i>✓</i><div><strong>Ready for a decision</strong><small>Response is held until checks finish.</small></div></div>
+            <div className={`release-preview__state release-preview__state--${releasePreview.state}`}><i>{releasePreview.state === "evaluating" ? "…" : releasePreview.state === "block" ? "×" : "✓"}</i><div><strong>{releasePreview.title}</strong><small>{releasePreview.detail}</small></div></div>
             <div className="release-preview__checks"><span><b>01</b> Evidence</span><span><b>02</b> Safety</span><span><b>03</b> Performance</span></div>
             <div className="release-preview__foot"><span>SELECTED PROFILE</span><strong>{activePolicy?.label ?? "Loading policy"}</strong></div>
           </div>
