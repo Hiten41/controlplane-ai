@@ -187,16 +187,17 @@ function App() {
       <header className="hero">
         <div>
           <div className="brand"><span className="brand__mark"><i></i><i></i><i></i></span>ControlPlane<span>.ai</span></div>
-          <p className="hero__kicker">AI GOVERNANCE, IN REAL TIME</p>
-          <h1>Trust every response<br /><em>before it ships.</em></h1>
-          <p className="hero__copy">A policy-driven control plane that evaluates AI output in parallel, separates restricted content from user-facing output, and preserves an auditable decision record.</p>
+          <p className="hero__kicker">CONTROLLED DELIVERY FOR AI PRODUCTS</p>
+          <h1>Every answer needs<br /><em>a release decision.</em></h1>
+          <p className="hero__copy">ControlPlane evaluates the response, applies the right policy for the moment, and keeps a decision record your team can actually inspect.</p>
         </div>
         <aside className="hero__visual" aria-label="Live ControlPlane policy visualization">
           <div className="hero__badge"><span className={`pulse pulse--${apiStatus}`}></span><div><small>Demo engine status</small><strong>{apiStatus === "ready" ? "Policy engine online" : apiStatus === "checking" ? "Connecting to API" : "API reconnect needed"}</strong></div><b>3</b></div>
-          <div className="signal-map">
-            <div className="signal-map__grid"></div><i className="signal-map__ring signal-map__ring--outer"></i><i className="signal-map__ring signal-map__ring--inner"></i><i className="signal-map__sweep"></i>
-            <span className="signal-map__node signal-map__node--evidence">E</span><span className="signal-map__node signal-map__node--safety">S</span><span className="signal-map__node signal-map__node--performance">P</span><span className="signal-map__core">✓</span>
-            <div className="signal-map__copy"><span>RELEASE GATE</span><strong>Await policy decision</strong><small>Evidence · Safety · Performance</small></div>
+          <div className="release-preview">
+            <div className="release-preview__head"><span>LIVE EVALUATION</span><b>CP / 042</b></div>
+            <div className="release-preview__state"><i>✓</i><div><strong>Ready for a decision</strong><small>Response is held until checks finish.</small></div></div>
+            <div className="release-preview__checks"><span><b>01</b> Evidence</span><span><b>02</b> Safety</span><span><b>03</b> Performance</span></div>
+            <div className="release-preview__foot"><span>SELECTED PROFILE</span><strong>{activePolicy?.label ?? "Loading policy"}</strong></div>
           </div>
         </aside>
       </header>
