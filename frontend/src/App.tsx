@@ -4,6 +4,15 @@ import type { Audit, Check, Evaluation, Policy, Scenario, Telemetry, UseCase } f
 
 const useCaseOrder: UseCase[] = ["customer_support", "internal_knowledge_assistant", "decision_support"];
 
+const scenarioMeta: Record<string, { signal: string; description: string; tone: "clear" | "caution" | "risk" }> = {
+  clean_answer: { signal: "Baseline", description: "Evidence-backed delivery answer", tone: "clear" },
+  unsupported_claim: { signal: "Evidence gap", description: "Unsupported return-policy claim", tone: "caution" },
+  pii_leak: { signal: "Privacy", description: "Structured PII in generated output", tone: "risk" },
+  biased_suggestion: { signal: "Safety", description: "Biased hiring recommendation", tone: "risk" },
+  overlap_sensitive: { signal: "Overlap", description: "PII plus insufficient evidence", tone: "risk" },
+  cost_overrun: { signal: "Performance", description: "Latency, tokens, and retries exceed budget", tone: "caution" },
+};
+
 function pretty(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -67,6 +76,7 @@ function App() {
   const [reviewNote, setReviewNote] = useState("");
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluationMessage, setEvaluationMessage] = useState("Running parallel checks...");
+  const [evaluationPhase, setEvaluationPhase] = useState<"idle" | "checking" | "waiting" | "complete">("idle");
   const [apiStatus, setApiStatus] = useState<"checking" | "ready" | "unavailable">("checking");
   const [error, setError] = useState("");
 
@@ -108,6 +118,17 @@ function App() {
     setCustomResponse(activeScenario.response);
     setCustomTelemetry(activeScenario.telemetry);
     setScenarioId("custom");
+    setResult(null);
+  }
+
+  function selectScenario(id: string) {
+    setScenarioId(id);
+    setResult(null);
+  }
+
+  function selectPolicy(profile: UseCase) {
+    setUseCase(profile);
+    setResult(null);
   }
 
   async function runEvaluation() {
@@ -120,8 +141,10 @@ function App() {
     }
     setError("");
     setIsEvaluating(true);
+    setEvaluationPhase("checking");
     setEvaluationMessage("Starting parallel policy checks...");
     const wakingTimer = window.setTimeout(() => {
+      setEvaluationPhase("waiting");
       setEvaluationMessage("Connecting to the policy engine...");
     }, 2500);
     const coldStartTimer = window.setTimeout(() => {
@@ -130,10 +153,12 @@ function App() {
     try {
       const nextResult = await api.evaluate({ use_case: useCase, ...payload });
       setResult(nextResult);
+      setEvaluationPhase("complete");
       await refreshRecords();
       setApiStatus("ready");
     } catch {
       setApiStatus("unavailable");
+      setEvaluationPhase("idle");
       setError("The policy API did not answer. If this is the first visit after inactivity, wait up to 60 seconds for Render to wake it, then select Retry connection.");
     } finally {
       window.clearTimeout(wakingTimer);
@@ -166,7 +191,14 @@ function App() {
           <h1>Trust every response<br /><em>before it ships.</em></h1>
           <p className="hero__copy">A policy-driven control plane that evaluates AI output in parallel, separates restricted content from user-facing output, and preserves an auditable decision record.</p>
         </div>
-        <div className="hero__badge"><span className={`pulse pulse--${apiStatus}`}></span><div><small>Demo engine status</small><strong>{apiStatus === "ready" ? "Policy engine online" : apiStatus === "checking" ? "Connecting to API" : "API reconnect needed"}</strong></div><b>3</b></div>
+        <aside className="hero__visual" aria-label="Live ControlPlane policy visualization">
+          <div className="hero__badge"><span className={`pulse pulse--${apiStatus}`}></span><div><small>Demo engine status</small><strong>{apiStatus === "ready" ? "Policy engine online" : apiStatus === "checking" ? "Connecting to API" : "API reconnect needed"}</strong></div><b>3</b></div>
+          <div className="signal-map">
+            <div className="signal-map__grid"></div><i className="signal-map__ring signal-map__ring--outer"></i><i className="signal-map__ring signal-map__ring--inner"></i><i className="signal-map__sweep"></i>
+            <span className="signal-map__node signal-map__node--evidence">E</span><span className="signal-map__node signal-map__node--safety">S</span><span className="signal-map__node signal-map__node--performance">P</span><span className="signal-map__core">✓</span>
+            <div className="signal-map__copy"><span>RELEASE GATE</span><strong>Await policy decision</strong><small>Evidence · Safety · Performance</small></div>
+          </div>
+        </aside>
       </header>
 
       {error && <div className="alert" role="alert"><span>{error}</span><button onClick={() => void loadData()}>Retry connection</button></div>}
@@ -176,7 +208,7 @@ function App() {
           <div className="section-title"><span>01</span><div><p>POLICY CONTROL</p><h2>Choose the risk profile</h2></div></div>
           <div className="policy-grid">
             {useCaseOrder.map((profile) => (
-              <button key={profile} className={`policy-card ${profile === useCase ? "policy-card--active" : ""}`} onClick={() => setUseCase(profile)}>
+              <button key={profile} className={`policy-card ${profile === useCase ? "policy-card--active" : ""}`} onClick={() => selectPolicy(profile)}>
                 <span>{profile === "decision_support" ? "High stakes" : profile === "customer_support" ? "Customer facing" : "Internal"}</span>
                 <strong>{policies ? policies[profile].label : pretty(profile)}</strong>
                 <small>{policies ? policies[profile].description : "Loading policy..."}</small>
@@ -189,13 +221,20 @@ function App() {
         </div>
 
         <div className="panel panel--scenario">
-          <div className="section-title"><span>02</span><div><p>RESPONSE GATE</p><h2>Evaluate a scenario</h2></div></div>
-          <label>Demo fixture or sandbox<select value={scenarioId} onChange={(event) => setScenarioId(event.target.value)}><option value="custom">Custom response sandbox</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label}</option>)}</select></label>
+          <div className="section-title"><span>02</span><div><p>RESPONSE GATE</p><h2>Choose a test signal</h2></div><small className="scenario-count">{scenarios.length || 6} scenarios</small></div>
+          <div className="scenario-deck" aria-label="Demo scenarios">
+            {scenarios.map((scenario) => {
+              const meta = scenarioMeta[scenario.id] ?? { signal: "Scenario", description: scenario.label, tone: "clear" as const };
+              return <button key={scenario.id} className={`scenario-card scenario-card--${meta.tone} ${scenario.id === scenarioId ? "scenario-card--active" : ""}`} onClick={() => selectScenario(scenario.id)} aria-pressed={scenario.id === scenarioId}><span>{meta.signal}</span><strong>{scenario.label}</strong><small>{meta.description}</small></button>;
+            })}
+            <button className={`scenario-card scenario-card--custom ${isCustom ? "scenario-card--active" : ""}`} onClick={() => selectScenario("custom")} aria-pressed={isCustom}><span>Sandbox</span><strong>Try your own</strong><small>Paste a prompt, response, and telemetry.</small></button>
+          </div>
           {isCustom ? <div className="sandbox-grid">
             <label>User prompt<textarea value={customPrompt} onChange={(event) => setCustomPrompt(event.target.value)} maxLength={5000} /></label>
             <label>Simulated AI response<textarea value={customResponse} onChange={(event) => setCustomResponse(event.target.value)} maxLength={8000} /></label>
             <div className="telemetry-inputs"><label>Latency (ms)<input type="number" min="0" value={customTelemetry.latency_ms} onChange={(event) => setCustomTelemetry({ ...customTelemetry, latency_ms: numberOrZero(event.target.value) })} /></label><label>Tokens<input type="number" min="0" value={customTelemetry.token_count} onChange={(event) => setCustomTelemetry({ ...customTelemetry, token_count: numberOrZero(event.target.value) })} /></label><label>Retries<input type="number" min="0" value={customTelemetry.retry_count} onChange={(event) => setCustomTelemetry({ ...customTelemetry, retry_count: numberOrZero(event.target.value) })} /></label></div>
           </div> : <><div className="content-grid"><div><span className="content-label">User prompt</span><p>{activeScenario?.prompt ?? "Loading..."}</p></div><div><span className="content-label">Simulated AI response</span><p>{activeScenario?.response ?? "Loading..."}</p></div></div>{activeScenario && <div className="fixture-tools"><p className="fixture-meta">Fixture telemetry · {activeScenario.telemetry.latency_ms}ms · {activeScenario.telemetry.token_count} tokens · {activeScenario.telemetry.retry_count} retries</p><button className="text-button" onClick={loadFixtureIntoSandbox}>Edit in sandbox</button></div>}</>}
+          <ol className={`evaluation-pipeline evaluation-pipeline--${evaluationPhase}`} aria-label="Evaluation pipeline"><li><span>01</span><div><b>Retrieve evidence</b><small>Claim-level approved-source match</small></div></li><li><span>02</span><div><b>Assess risk</b><small>PII, safety, and bias patterns</small></div></li><li><span>03</span><div><b>Apply policy</b><small>Release, hold, edit, or block</small></div></li></ol>
           <button className="evaluate" onClick={() => void runEvaluation()} disabled={isEvaluating || (!isCustom && !activeScenario)}>{isEvaluating ? evaluationMessage : "Evaluate response"}</button>
           {isEvaluating && <p className="evaluation-hint" role="status">The response remains held until the policy decision is complete.</p>}
         </div>
@@ -207,7 +246,7 @@ function App() {
           <div className="decision-panel">
             <div className={decisionClass(result.decision)}>{pretty(result.decision)}</div><h3>{result.decision_reason}</h3>
             <div className={`release-state release-state--${result.release_status.toLowerCase()}`}><span>{releaseCopy(result.release_status)}</span><p>{result.end_user_response ?? "The original output remains restricted inside the control plane and has not been released."}</p></div>
-            <div className="raw-response"><span>Restricted operator content</span><p>{result.raw_response}</p></div><p className="audit-id">Audit ID · {result.audit_id} · 3 checks completed in {result.total_check_latency_ms}ms</p>
+            {result.decision === "ALLOW" ? <div className="source-match"><span>Source integrity</span><p>The approved source output and released response match exactly.</p></div> : <div className="raw-response"><span>Restricted operator content</span><p>{result.raw_response}</p></div>}<p className="audit-id">Audit ID · {result.audit_id} · 3 checks completed in {result.total_check_latency_ms}ms</p>
           </div>
           <div className="check-grid">{result.checks.map((check) => <CheckCard key={check.name} check={check} />)}</div>
         </div>
