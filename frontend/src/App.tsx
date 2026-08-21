@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { api } from "./api";
 import { demoPolicies, demoScenarios } from "./demoCatalog";
 import type { Audit, Check, Evaluation, Policy, Scenario, Telemetry, UseCase } from "./types";
@@ -34,27 +34,114 @@ function releaseCopy(status: Evaluation["release_status"]) {
   return "Withheld from end user";
 }
 
-function CheckCard({ check }: { check: Check }) {
+function numberDetail(details: Record<string, unknown>, key: string) {
+  const value = details[key];
+  return typeof value === "number" ? value : 0;
+}
+
+function statusTone(status: string) {
+  if (status === "insufficient_evidence") return "uncertain";
+  if (["grounded", "clear", "within_budget"].includes(status)) return "calm";
+  return "alert";
+}
+
+function statusLabel(status: string) {
+  if (status === "insufficient_evidence") return "Evidence unavailable";
+  if (status === "unsupported_claim") return "Unsupported claim";
+  return pretty(status);
+}
+
+function HighlightedResponse({ text, spans }: { text: string; spans: string[] }) {
+  const matches = [...new Set(spans.filter(Boolean))]
+    .map((span) => ({ span, index: text.toLocaleLowerCase().indexOf(span.toLocaleLowerCase()) }))
+    .filter((match) => match.index >= 0)
+    .sort((a, b) => a.index - b.index);
+  if (matches.length === 0) return <p>{text}</p>;
+
+  const parts: Array<string | { text: string; flagged: true }> = [];
+  let cursor = 0;
+  for (const match of matches) {
+    if (match.index < cursor) continue;
+    if (match.index > cursor) parts.push(text.slice(cursor, match.index));
+    parts.push({ text: text.slice(match.index, match.index + match.span.length), flagged: true });
+    cursor = match.index + match.span.length;
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return <p>{parts.map((part, index) => typeof part === "string" ? part : <mark key={`${part.text}-${index}`}>{part.text}</mark>)}</p>;
+}
+
+function TelemetryInstrument({ check, policy }: { check: Check; policy: Policy }) {
+  const details = check.details;
+  const readings = [
+    { label: "Latency", actual: numberDetail(details, "latency_ms"), budget: policy.max_latency_ms, unit: "ms" },
+    { label: "Tokens", actual: numberDetail(details, "token_count"), budget: policy.max_token_count, unit: "" },
+    { label: "Retries", actual: numberDetail(details, "retry_count"), budget: policy.max_retry_count, unit: "" },
+  ];
+  return <div className="telemetry-instrument" aria-label="Performance against selected policy budget">
+    <div className="telemetry-instrument__head"><span>Policy budget</span><b>{check.status === "within_budget" ? "Within limits" : "Budget breached"}</b></div>
+    {readings.map((reading) => {
+      const ratio = reading.budget === 0 ? (reading.actual > 0 ? 1 : 0) : Math.min(reading.actual / reading.budget, 1);
+      const exceeded = reading.actual > reading.budget;
+      return <div className={`instrument-line ${exceeded ? "instrument-line--exceeded" : ""}`} key={reading.label}>
+        <span>{reading.label}</span><div className="instrument-line__bar"><i style={{ width: `${Math.max(ratio * 100, 3)}%` }}></i></div><b>{reading.actual}{reading.unit} <small>/ {reading.budget}{reading.unit}</small></b>
+      </div>;
+    })}
+  </div>;
+}
+
+function CheckCard({ check, policy }: { check: Check; policy: Policy }) {
   const evidence = check.evidence[0];
   const details = check.details;
   const duration = typeof details.duration_ms === "number" ? details.duration_ms : null;
+  const tone = statusTone(check.status);
   return (
-    <article className="check-card">
+    <article className={`check-card check-card--${tone}`}>
       <div className="check-card__topline">
         <span className="eyebrow">{pretty(check.name)}</span>
-        <span className={`status status--${check.status}`}>{pretty(check.status)}</span>
+        <span className={`status status--${check.status}`}>{statusLabel(check.status)}</span>
       </div>
       <div className="score-row">
         <strong>{Math.round(check.score * 100)}</strong><span>{scoreLabel(check)}</span>
         <span className="confidence">{Math.round(check.confidence * 100)}% confidence</span>
       </div>
       <p>{check.reason}</p>
+      {check.status === "insufficient_evidence" && <div className="uncertainty-note"><b>Uncertainty, not a falsehood</b><span>No approved source was sufficient to verify this claim.</span></div>}
       {evidence && <div className="evidence"><span>{evidence.source_type ?? "Evidence"} · {evidence.title}</span><p>{evidence.excerpt}</p><small>{evidence.updated_at ? `Current as of ${evidence.updated_at}` : "Approved source"}</small></div>}
-      {Boolean(details.budget_breached) && <div className="telemetry">{String(details.latency_ms)}ms · {String(details.token_count)} tokens · {String(details.retry_count)} retries</div>}
+      {check.name === "cost_performance" && <TelemetryInstrument check={check} policy={policy} />}
       {duration !== null && <div className="check-duration">Completed in {duration}ms</div>}
-      {check.flagged_spans.length > 0 && <div className="flagged">{check.flagged_spans.map((span, index) => <mark key={`${span}-${index}`}>{span}</mark>)}</div>}
+      {check.flagged_spans.length > 0 && <div className="flagged"><span>Detected</span>{check.flagged_spans.map((span, index) => <mark key={`${span}-${index}`}>{span}</mark>)}</div>}
     </article>
   );
+}
+
+function ControlTower({ result }: { result: Evaluation }) {
+  const lanes = [
+    { name: "groundedness", label: "Evidence", description: "Approved-source match" },
+    { name: "safety_pii", label: "Safety + privacy", description: "PII, bias, unsafe content" },
+    { name: "cost_performance", label: "Performance", description: "Latency, tokens, retries" },
+  ];
+  return <section className="control-tower" aria-label="Parallel policy check readout">
+    <div className="control-tower__header"><div><span>CONTROL TOWER</span><h3>Three checks, one release decision</h3></div><p>All lanes started in parallel · completed in <b>{result.total_check_latency_ms}ms</b></p></div>
+    <div className="tower-lanes">
+      {lanes.map((lane, index) => {
+        const check = result.checks.find((item) => item.name === lane.name);
+        if (!check) return null;
+        const duration = numberDetail(check.details, "duration_ms");
+        return <article className={`tower-lane tower-lane--${statusTone(check.status)}`} key={lane.name} style={{ "--lane-delay": `${index * 160}ms` } as CSSProperties}>
+          <div className="tower-lane__signal"><span>{String(index + 1).padStart(2, "0")}</span><i></i></div>
+          <div><span>{lane.label}</span><strong>{statusLabel(check.status)}</strong><small>{lane.description}</small></div>
+          <div className="tower-lane__metric"><b>{Math.round(check.score * 100)}</b><span>score</span><small>{duration}ms</small></div>
+        </article>;
+      })}
+      <div className={`tower-clearance tower-clearance--${result.decision.toLowerCase()}`}><span>RELEASE CLEARANCE</span><strong>{pretty(result.decision)}</strong><small>{releaseCopy(result.release_status)}</small></div>
+    </div>
+  </section>;
+}
+
+function formatTimestamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recorded just now";
+  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
 function numberOrZero(value: string) {
@@ -73,6 +160,7 @@ function App() {
   const [result, setResult] = useState<Evaluation | null>(null);
   const [audits, setAudits] = useState<Audit[]>([]);
   const [reviews, setReviews] = useState<Audit[]>([]);
+  const [auditFilter, setAuditFilter] = useState<UseCase | "all">("all");
   const [reviewerId, setReviewerId] = useState("demo-reviewer");
   const [reviewNote, setReviewNote] = useState("");
   const [isEvaluating, setIsEvaluating] = useState(false);
@@ -87,6 +175,18 @@ function App() {
     [scenarioId, scenarios],
   );
   const activePolicy = policies?.[useCase];
+  const resultFlaggedSpans = result ? result.checks.flatMap((check) => check.flagged_spans) : [];
+  const visibleAudits = useMemo(
+    () => auditFilter === "all" ? audits : audits.filter((audit) => audit.use_case === auditFilter),
+    [auditFilter, audits],
+  );
+  const decisionMix = useMemo(() => useCaseOrder.map((profile) => {
+    const records = audits.filter((audit) => audit.use_case === profile);
+    const total = records.length;
+    const allowed = records.filter((audit) => audit.final_decision === "ALLOW").length;
+    const held = records.filter((audit) => audit.release_status !== "RELEASED").length;
+    return { profile, total, allowed, held };
+  }), [audits]);
   const releasePreview = result
     ? { title: pretty(result.decision), detail: releaseCopy(result.release_status), state: result.decision.toLowerCase() }
     : isEvaluating
@@ -219,6 +319,7 @@ function App() {
                 <span>{profile === "decision_support" ? "High stakes" : profile === "customer_support" ? "Customer facing" : "Internal"}</span>
                 <strong>{policies ? policies[profile].label : pretty(profile)}</strong>
                 <small>{policies ? policies[profile].description : "Loading policy..."}</small>
+                {policies && <div className="policy-readouts"><span>Evidence {Math.round(policies[profile].minimum_groundedness_score * 100)}%</span><span>PII {pretty(policies[profile].pii_action)}</span><span>{policies[profile].max_latency_ms}ms</span></div>}
               </button>
             ))}
           </div>
@@ -247,26 +348,33 @@ function App() {
         </div>
       </section>
 
-      {result && <section className="result-section">
+      {result && <section className="result-section" key={result.audit_id}>
         <div className="section-title"><span>03</span><div><p>DECISION ENGINE</p><h2>Policy decision</h2></div></div>
+        <ControlTower result={result} />
         <div className="result-layout">
           <div className="decision-panel">
             <div className={decisionClass(result.decision)}>{pretty(result.decision)}</div><h3>{result.decision_reason}</h3>
-            <div className={`release-state release-state--${result.release_status.toLowerCase()}`}><span>{releaseCopy(result.release_status)}</span><p>{result.end_user_response ?? "The original output remains restricted inside the control plane and has not been released."}</p></div>
-            {result.decision === "ALLOW" ? <div className="source-match"><span>Source integrity</span><p>The approved source output and released response match exactly.</p></div> : <div className="raw-response"><span>Restricted operator content</span><p>{result.raw_response}</p></div>}<p className="audit-id">Audit ID · {result.audit_id} · 3 checks completed in {result.total_check_latency_ms}ms</p>
+            {result.end_user_response && result.end_user_response !== result.raw_response ? <div className="response-comparison">
+              <article className="response-channel response-channel--operator"><span>Original model output · operator only</span><HighlightedResponse text={result.raw_response} spans={resultFlaggedSpans} /></article>
+              <article className="response-channel response-channel--released"><span>What the end user sees</span><p>{result.end_user_response}</p></article>
+            </div> : <>
+              <div className={`release-state release-state--${result.release_status.toLowerCase()}`}><span>{releaseCopy(result.release_status)}</span><p>{result.end_user_response ?? "The original output remains restricted inside the control plane and has not been released."}</p></div>
+              {result.decision === "ALLOW" ? <div className="source-match"><span>Source integrity</span><p>The approved source output and released response match exactly.</p></div> : <div className="raw-response"><span>Original model output · operator only</span><HighlightedResponse text={result.raw_response} spans={resultFlaggedSpans} /></div>}
+            </>}
+            <p className="audit-id">Audit ID · {result.audit_id} · 3 checks completed concurrently in {result.total_check_latency_ms}ms</p>
           </div>
-          <div className="check-grid">{result.checks.map((check) => <CheckCard key={check.name} check={check} />)}</div>
+          <div className="check-grid">{result.checks.map((check) => <CheckCard key={check.name} check={check} policy={result.policy} />)}</div>
         </div>
-        <div className="decision-trace"><div><span className="trace-label">DECISION PRECEDENCE</span><h3>Why this action was selected</h3></div><ol>{result.decision_trace.map((step) => <li key={step.order}><span>{step.rule}</span><b>{pretty(step.outcome)}</b><p>{step.detail}</p></li>)}</ol></div>
+        <div className="decision-trace"><div><span className="trace-label">DECISION PRECEDENCE</span><h3>Why this action was selected</h3><p>Ordered rules make the policy decision inspectable, not opaque.</p></div><ol>{result.decision_trace.map((step, index) => <li key={step.order} style={{ "--trace-delay": `${520 + index * 120}ms` } as CSSProperties}><span className="trace-order">{String(step.order).padStart(2, "0")}</span><span>{step.rule}</span><b>{pretty(step.outcome)}</b><p>{step.detail}</p></li>)}</ol></div>
       </section>}
 
       <section className="operations-grid">
         <div className="panel review-panel">
-          <div className="section-title"><span>04</span><div><p>HUMAN IN THE LOOP</p><h2>Review queue</h2></div></div>
+          <div className="section-title"><span>04</span><div><p>HUMAN IN THE LOOP</p><h2>Review queue</h2></div><small className="queue-count">{reviews.filter((review) => review.review_status === "PENDING").length} pending</small></div>
           {reviews.some((review) => review.review_status === "PENDING") && <div className="review-form"><label>Reviewer ID<input value={reviewerId} onChange={(event) => setReviewerId(event.target.value)} maxLength={100} /></label><label>Reason required for override<textarea value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} maxLength={1000} placeholder="State why the policy outcome is being changed." /></label></div>}
-          {reviews.length === 0 ? <p className="empty">No cases are waiting for a reviewer.</p> : reviews.map((review) => (
+          {reviews.length === 0 ? <div className="empty-state"><span>Queue clear</span><p>No cases are waiting for a reviewer.</p></div> : reviews.map((review) => (
             <div className="review-card" key={review.audit_id}>
-              <div><strong>{pretty(review.use_case)}</strong><span>{review.decision_reason}</span><small>{review.review_status ?? "PENDING"} · {review.audit_id.slice(0, 8)}</small></div>
+              <div className="review-card__summary"><div><strong>{pretty(review.use_case)}</strong><span>{review.decision_reason}</span></div>{review.flagged_spans.length > 0 && <div className="review-flags">{review.flagged_spans.slice(0, 2).map((span) => <mark key={span}>{span}</mark>)}</div>}<small className={`review-status review-status--${(review.review_status ?? "PENDING").toLowerCase()}`}>{pretty(review.review_status ?? "PENDING")} · {review.audit_id.slice(0, 8)}</small></div>
               {review.review_status === "PENDING" && <div className="review-actions"><button onClick={() => void resolveReview(review.audit_id, "APPROVED")}>Approve hold</button><button className="button--ghost" onClick={() => void resolveReview(review.audit_id, "OVERRIDDEN")}>Override</button></div>}
             </div>
           ))}
@@ -274,9 +382,14 @@ function App() {
 
         <div className="panel audit-panel">
           <div className="section-title"><span>05</span><div><p>OBSERVABILITY</p><h2>Immutable-style audit trail</h2></div></div>
-          <div className="audit-head"><span>Decision</span><span>Release</span><span>Evidence</span><span>Telemetry</span></div>
-          {audits.slice(0, 5).map((audit) => <details className="audit-entry" key={audit.audit_id}><summary className="audit-row"><span className={decisionClass(audit.final_decision)}>{pretty(audit.final_decision)}</span><span>{pretty(audit.release_status)}</span><span>{pretty(audit.groundedness_status)}</span><span>{audit.cost_latency_ms}ms · {audit.cost_token_count}t</span></summary><div className="audit-detail"><p><b>Audit ID:</b> {audit.audit_id}</p><p><b>Decision:</b> {audit.decision_reason}</p><p><b>Recorded steps:</b> {audit.decision_trace.map((step) => `${step.rule}: ${pretty(step.outcome)}`).join(" → ") || "Legacy audit record"}</p></div></details>)}
-          {audits.length === 0 && <p className="empty">Run a scenario to create the first audit record.</p>}
+          <div className="decision-mix" aria-label="Decision mix by use case">
+            {decisionMix.map((mix) => <div className="mix-card" key={mix.profile}><span>{pretty(mix.profile)}</span><div><i style={{ width: `${mix.total ? (mix.allowed / mix.total) * 100 : 0}%` }}></i><b style={{ width: `${mix.total ? (mix.held / mix.total) * 100 : 0}%` }}></b></div><small>{mix.total ? `${mix.allowed} released · ${mix.held} held` : "No evaluations yet"}</small></div>)}
+          </div>
+          <div className="audit-toolbar"><span>Filter by policy</span><div>{(["all", ...useCaseOrder] as Array<UseCase | "all">).map((filter) => <button key={filter} className={auditFilter === filter ? "audit-filter--active" : ""} onClick={() => setAuditFilter(filter)}>{filter === "all" ? "All" : pretty(filter)}</button>)}</div></div>
+          <div className="audit-head"><span>Decision</span><span>Use case</span><span>Recorded</span><span>Evidence</span><span>Telemetry</span></div>
+          {visibleAudits.slice(0, 10).map((audit) => <details className="audit-entry" key={audit.audit_id}><summary className="audit-row"><span className={decisionClass(audit.final_decision)}>{pretty(audit.final_decision)}</span><span>{pretty(audit.use_case)}</span><span>{formatTimestamp(audit.created_at)}</span><span>{pretty(audit.groundedness_status)}</span><span>{audit.cost_latency_ms}ms · {audit.cost_token_count}t</span></summary><div className="audit-detail"><p><b>Audit ID:</b> {audit.audit_id}</p><p><b>Decision:</b> {audit.decision_reason}</p><p><b>Recorded steps:</b> {audit.decision_trace.map((step) => `${step.rule}: ${pretty(step.outcome)}`).join(" → ") || "Legacy audit record"}</p></div></details>)}
+          {audits.length === 0 && <div className="empty-state"><span>Awaiting first record</span><p>Run a scenario to create the first audit entry.</p></div>}
+          {audits.length > 0 && visibleAudits.length === 0 && <div className="empty-state"><span>No matching records</span><p>Try a different policy filter.</p></div>}
         </div>
       </section>
 

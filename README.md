@@ -90,6 +90,63 @@ pending a reviewer decision; it is never presented as released content.
 
 This makes policy variation visible in the demo: the same unsupported return-policy claim is `AUTO_EDIT` for customer support and `BLOCK` for decision support.
 
+## UI / UX design: the Control Tower
+
+The interface is designed for a judge to understand a release decision in a few
+minutes—not to look like a generic AI dashboard. The visual system treats the
+product as a live control room: distinct instruments converge on a single
+clearance decision.
+
+### Design tokens
+
+| Token | Hex | Meaning |
+| --- | --- | --- |
+| Radar Navy | `#182448` | Control-tower surface and decision context |
+| Signal Indigo | `#6174D8` | Active control, structured operational state |
+| Clearance Mint | `#59B89A` | Grounded, clear, and released outcomes |
+| Caution Amber | `#E7AD55` | Budget pressure and review attention |
+| Alert Coral | `#D96A80` | Privacy, safety, and blocked-risk signals |
+| Console Paper | `#F5F2EA` | High-legibility operator workspace |
+
+`DM Serif Display` gives release decisions and key headings a deliberate,
+human-readable voice. `DM Sans` is used for operational copy and `DM Mono` for
+policy values, timings, audit IDs, and decision-trace data.
+
+### Signature interaction: three lanes into one clearance
+
+After an evaluation, the **Control Tower** renders the actual groundedness,
+safety/PII, and cost/performance outputs as three parallel lanes. Each lane
+shows its real score, status, and `duration_ms`; the total time comes from the
+API's `total_check_latency_ms`. The lanes converge on the policy result, making
+parallel evaluation legible without inventing false telemetry. The ordered API
+decision trace then reveals in sequence, so a judge can see exactly which rule
+led to `ALLOW`, `AUTO_EDIT`, `FLAG_FOR_HUMAN_REVIEW`, or `BLOCK`.
+
+The visual treatment deliberately distinguishes **insufficient evidence** from
+an **unsupported claim**: the former receives an uncertainty state and plain
+language explaining that an approved source was not sufficient to verify the
+claim; it is never styled as a proven falsehood.
+
+For an `AUTO_EDIT`, the original restricted model response and the end-user
+replacement are shown side-by-side in the decision panel. Flagged spans are
+highlighted inside the original response. Cost telemetry is drawn as actual vs
+policy-budget instrumentation, not a generic KPI card.
+
+Motion is limited to the Control Tower lane and trace reveal, and is disabled
+for users who prefer reduced motion. All controls retain a visible keyboard
+focus state and the layouts collapse intentionally for mobile.
+
+### Screens
+
+| Evaluation console | Control Tower + edited output | Review queue + audit dashboard |
+| --- | --- | --- |
+| ![Policy selector and scenario console](screenshots/evaluation-console.png) | ![Parallel lanes converge into the AUTO EDIT decision](screenshots/auto-edit-control-tower.png) | ![Review queue and queryable audit table](screenshots/audit-and-review.png) |
+
+The frontend maintains a small, read-only copy of the public policy and fixture
+catalogue. This keeps the selector useful during the first Render free-tier
+cold start; evaluations, audit records, reviews, and decisions still come from
+the FastAPI service.
+
 ## Detection approach
 
 | Check | Implementation | What it returns |
@@ -127,7 +184,8 @@ controlplane-ai/
 ├── frontend/
 │   ├── src/App.tsx                 # Dashboard and human review UI
 │   ├── src/api.ts                  # API client
-│   └── src/styles.css              # Visual system
+│   └── src/styles*.css             # Layered visual system / Control Tower UI
+├── screenshots/                    # Judge-facing UI captures used above
 └── README.md
 ```
 
