@@ -187,11 +187,6 @@ function App() {
     const held = records.filter((audit) => audit.release_status !== "RELEASED").length;
     return { profile, total, allowed, held };
   }), [audits]);
-  const releasePreview = result
-    ? { title: pretty(result.decision), detail: releaseCopy(result.release_status), state: result.decision.toLowerCase() }
-    : isEvaluating
-      ? { title: "Checks in progress", detail: "The response remains held until every check completes.", state: "evaluating" }
-      : { title: "Ready for a decision", detail: "Response is held until checks finish.", state: "ready" };
 
   async function refreshRecords() {
     const [nextAudits, nextReviews] = await Promise.all([api.getAudits(), api.getReviews()]);
@@ -216,6 +211,15 @@ function App() {
 
   useEffect(() => {
     void loadData();
+  }, []);
+
+  useEffect(() => {
+    const targetId = window.location.hash.slice(1);
+    if (!targetId) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(targetId)?.scrollIntoView({ block: "start" });
+    }, 100);
+    return () => window.clearTimeout(timer);
   }, []);
 
   function loadFixtureIntoSandbox() {
@@ -290,46 +294,39 @@ function App() {
 
   return (
     <main className="shell">
-      <header className="hero">
-        <div>
-          <div className="brand"><span className="brand__mark"><i></i><i></i><i></i></span>ControlPlane<span>.ai</span></div>
-          <p className="hero__kicker">CONTROLLED DELIVERY FOR AI PRODUCTS</p>
-          <h1>Every answer needs<br /><em>a release decision.</em></h1>
-          <p className="hero__copy">ControlPlane evaluates the response, applies the right policy for the moment, and keeps a decision record your team can actually inspect.</p>
-        </div>
-        <aside className="hero__visual" aria-label="Live ControlPlane policy visualization">
-          <div className="hero__badge"><span className={`pulse pulse--${apiStatus}`}></span><div><small>Demo engine status</small><strong>{apiStatus === "ready" ? "Policy engine online" : apiStatus === "checking" ? "Connecting to API" : "API reconnect needed"}</strong></div><b>3</b></div>
-          <div className="release-preview">
-            <div className="release-preview__head"><span>LIVE EVALUATION</span><b>CP / 042</b></div>
-            <div className={`release-preview__state release-preview__state--${releasePreview.state}`}><i>{releasePreview.state === "evaluating" ? "…" : releasePreview.state === "block" ? "×" : "✓"}</i><div><strong>{releasePreview.title}</strong><small>{releasePreview.detail}</small></div></div>
-            <div className="release-preview__checks"><span><b>01</b> Evidence</span><span><b>02</b> Safety</span><span><b>03</b> Performance</span></div>
-            <div className="release-preview__foot"><span>SELECTED PROFILE</span><strong>{activePolicy?.label ?? "Loading policy"}</strong></div>
-          </div>
-        </aside>
+      <header className="masthead">
+        <div className="wordmark">ControlPlane<span>.ai</span></div>
+        <p>Response release console · Team Cocomelon</p>
+        <div className="engine-readout"><i className={`pulse pulse--${apiStatus}`}></i><span>Policy engine</span><strong>{apiStatus === "ready" ? "ONLINE" : apiStatus === "checking" ? "CONNECTING" : "RECONNECT NEEDED"}</strong></div>
       </header>
+
+      <section className="console-brief" aria-labelledby="console-title">
+        <div><p>LIVE RESPONSE CONTROL</p><h1 id="console-title">Run a response through<br /><em>its release gate.</em></h1></div>
+        <p>Choose the policy context and a test signal. The engine checks evidence, safety, and operational cost in parallel before it releases, edits, holds, or blocks the response.</p>
+      </section>
 
       {error && <div className="alert" role="alert"><span>{error}</span><button onClick={() => void loadData()}>Retry connection</button></div>}
 
-      <section className="workspace">
+      <section className="workspace" id="evaluation-console">
         <div className="panel panel--controls">
-          <div className="section-title"><span>01</span><div><p>POLICY CONTROL</p><h2>Choose the risk profile</h2></div></div>
+          <div className="section-title"><div><p>POLICY CONTROL</p><h2>Choose the risk profile</h2></div></div>
           <div className="policy-grid">
             {useCaseOrder.map((profile) => (
               <button key={profile} className={`policy-card ${profile === useCase ? "policy-card--active" : ""}`} onClick={() => selectPolicy(profile)}>
                 <span>{profile === "decision_support" ? "High stakes" : profile === "customer_support" ? "Customer facing" : "Internal"}</span>
                 <strong>{policies ? policies[profile].label : pretty(profile)}</strong>
                 <small>{policies ? policies[profile].description : "Loading policy..."}</small>
-                {policies && <div className="policy-readouts"><span>Evidence {Math.round(policies[profile].minimum_groundedness_score * 100)}%</span><span>PII {pretty(policies[profile].pii_action)}</span><span>{policies[profile].max_latency_ms}ms</span></div>}
+                {policies && <div className="policy-readouts"><span><b>Evidence</b>{Math.round(policies[profile].minimum_groundedness_score * 100)}%</span><span><b>PII</b>{pretty(policies[profile].pii_action)}</span><span><b>Latency</b>{policies[profile].max_latency_ms}ms</span></div>}
               </button>
             ))}
           </div>
           {activePolicy && <><div className="policy-summary">
-            <span>Policy v{activePolicy.version}</span><span>Evidence ≥ {Math.round(activePolicy.minimum_groundedness_score * 100)}%</span><span>Latency ≤ {activePolicy.max_latency_ms}ms</span><span>PII → {pretty(activePolicy.pii_action)}</span>
+            <span><b>Version</b>{activePolicy.version}</span><span><b>Evidence</b>≥ {Math.round(activePolicy.minimum_groundedness_score * 100)}%</span><span><b>Latency</b>≤ {activePolicy.max_latency_ms}ms</span><span><b>PII</b>{pretty(activePolicy.pii_action)}</span>
           </div><details className="policy-details"><summary>View configured actions</summary><p>Unsupported → {pretty(activePolicy.unsupported_claim_action)} · Insufficient evidence → {pretty(activePolicy.insufficient_evidence_action)} · Unsafe content → {pretty(activePolicy.unsafe_content_action)} · Cost overrun → {pretty(activePolicy.cost_overrun_action)}</p></details></>}
         </div>
 
         <div className="panel panel--scenario">
-          <div className="section-title"><span>02</span><div><p>RESPONSE GATE</p><h2>Choose a test signal</h2></div><small className="scenario-count">{scenarios.length || 6} scenarios</small></div>
+          <div className="section-title"><div><p>RESPONSE GATE</p><h2>Choose a test signal</h2></div><span className="scenario-count">{scenarios.length || 6} test cases</span></div>
           <div className="scenario-deck" aria-label="Demo scenarios">
             {scenarios.map((scenario) => {
               const meta = scenarioMeta[scenario.id] ?? { signal: "Scenario", description: scenario.label, tone: "clear" as const };
@@ -342,14 +339,14 @@ function App() {
             <label>Simulated AI response<textarea value={customResponse} onChange={(event) => setCustomResponse(event.target.value)} maxLength={8000} /></label>
             <div className="telemetry-inputs"><label>Latency (ms)<input type="number" min="0" value={customTelemetry.latency_ms} onChange={(event) => setCustomTelemetry({ ...customTelemetry, latency_ms: numberOrZero(event.target.value) })} /></label><label>Tokens<input type="number" min="0" value={customTelemetry.token_count} onChange={(event) => setCustomTelemetry({ ...customTelemetry, token_count: numberOrZero(event.target.value) })} /></label><label>Retries<input type="number" min="0" value={customTelemetry.retry_count} onChange={(event) => setCustomTelemetry({ ...customTelemetry, retry_count: numberOrZero(event.target.value) })} /></label></div>
           </div> : <><div className="content-grid"><div><span className="content-label">User prompt</span><p>{activeScenario?.prompt ?? "Loading..."}</p></div><div><span className="content-label">Simulated AI response</span><p>{activeScenario?.response ?? "Loading..."}</p></div></div>{activeScenario && <div className="fixture-tools"><p className="fixture-meta">Fixture telemetry · {activeScenario.telemetry.latency_ms}ms · {activeScenario.telemetry.token_count} tokens · {activeScenario.telemetry.retry_count} retries</p><button className="text-button" onClick={loadFixtureIntoSandbox}>Edit in sandbox</button></div>}</>}
-          <ol className={`evaluation-pipeline evaluation-pipeline--${evaluationPhase}`} aria-label="Evaluation pipeline"><li><span>01</span><div><b>Retrieve evidence</b><small>Claim-level approved-source match</small></div></li><li><span>02</span><div><b>Assess risk</b><small>PII, safety, and bias patterns</small></div></li><li><span>03</span><div><b>Apply policy</b><small>Release, hold, edit, or block</small></div></li></ol>
+          <ol className={`evaluation-pipeline evaluation-pipeline--${evaluationPhase}`} aria-label="Evaluation pipeline"><li><span></span><div><b>Evidence</b><small>Approved-source match</small></div></li><li><span></span><div><b>Safety</b><small>PII, bias, unsafe content</small></div></li><li><span></span><div><b>Performance</b><small>Latency, tokens, retries</small></div></li></ol>
           <button className="evaluate" onClick={() => void runEvaluation()} disabled={isEvaluating || (!isCustom && !activeScenario)}>{isEvaluating ? evaluationMessage : "Evaluate response"}</button>
           {isEvaluating && <p className="evaluation-hint" role="status">The response remains held until the policy decision is complete.</p>}
         </div>
       </section>
 
-      {result && <section className="result-section" key={result.audit_id}>
-        <div className="section-title"><span>03</span><div><p>DECISION ENGINE</p><h2>Policy decision</h2></div></div>
+      {result && <section className="result-section" id="control-tower-results" key={result.audit_id}>
+        <div className="section-title"><div><p>DECISION ENGINE</p><h2>Release decision</h2></div><span className="result-time">TOTAL {result.total_check_latency_ms}ms</span></div>
         <ControlTower result={result} />
         <div className="result-layout">
           <div className="decision-panel">
@@ -369,8 +366,8 @@ function App() {
       </section>}
 
       <section className="operations-grid">
-        <div className="panel review-panel">
-          <div className="section-title"><span>04</span><div><p>HUMAN IN THE LOOP</p><h2>Review queue</h2></div><small className="queue-count">{reviews.filter((review) => review.review_status === "PENDING").length} pending</small></div>
+        <div className="panel review-panel" id="review-queue">
+          <div className="section-title"><div><p>HUMAN IN THE LOOP</p><h2>Review queue</h2></div><span className="queue-count">{reviews.filter((review) => review.review_status === "PENDING").length} PENDING</span></div>
           {reviews.some((review) => review.review_status === "PENDING") && <div className="review-form"><label>Reviewer ID<input value={reviewerId} onChange={(event) => setReviewerId(event.target.value)} maxLength={100} /></label><label>Reason required for override<textarea value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} maxLength={1000} placeholder="State why the policy outcome is being changed." /></label></div>}
           {reviews.length === 0 ? <div className="empty-state"><span>Queue clear</span><p>No cases are waiting for a reviewer.</p></div> : reviews.map((review) => (
             <div className="review-card" key={review.audit_id}>
@@ -380,8 +377,8 @@ function App() {
           ))}
         </div>
 
-        <div className="panel audit-panel">
-          <div className="section-title"><span>05</span><div><p>OBSERVABILITY</p><h2>Immutable-style audit trail</h2></div></div>
+        <div className="panel audit-panel" id="audit-trail">
+          <div className="section-title"><div><p>OBSERVABILITY</p><h2>Audit trail</h2></div></div>
           <div className="decision-mix" aria-label="Decision mix by use case">
             {decisionMix.map((mix) => <div className="mix-card" key={mix.profile}><span>{pretty(mix.profile)}</span><div><i style={{ width: `${mix.total ? (mix.allowed / mix.total) * 100 : 0}%` }}></i><b style={{ width: `${mix.total ? (mix.held / mix.total) * 100 : 0}%` }}></b></div><small>{mix.total ? `${mix.allowed} released · ${mix.held} held` : "No evaluations yet"}</small></div>)}
           </div>

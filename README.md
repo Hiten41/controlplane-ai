@@ -90,57 +90,83 @@ pending a reviewer decision; it is never presented as released content.
 
 This makes policy variation visible in the demo: the same unsupported return-policy claim is `AUTO_EDIT` for customer support and `BLOCK` for decision support.
 
-## UI / UX design: the Control Tower
+## UI / UX design: operator console
 
-The interface is designed for a judge to understand a release decision in a few
-minutes—not to look like a generic AI dashboard. The visual system treats the
-product as a live control room: distinct instruments converge on a single
-clearance decision.
+The interface is designed as an AI-response release console, not a generic
+SaaS dashboard. It reduces the judge journey to one operating question:
+**what did the system see, and why did it release, edit, hold, or block this
+response?**
 
-### Design tokens
+### Token system
 
-| Token | Hex | Meaning |
+| Token | Hex | Role |
 | --- | --- | --- |
-| Radar Navy | `#182448` | Control-tower surface and decision context |
-| Signal Indigo | `#6174D8` | Active control, structured operational state |
-| Clearance Mint | `#59B89A` | Grounded, clear, and released outcomes |
-| Caution Amber | `#E7AD55` | Budget pressure and review attention |
-| Alert Coral | `#D96A80` | Privacy, safety, and blocked-risk signals |
-| Console Paper | `#F5F2EA` | High-legibility operator workspace |
+| Instrument Black | `#0C0F12` | Page and operator-console background |
+| Console Slate | `#151B20` | Work surfaces and focused controls |
+| Grid Line | `#2A353C` | Instrument divisions and table structure |
+| Primary / secondary text | `#F1EEDB` / `#9AA4A9` | Hierarchy without extra boxes |
+| Nominal | `#4CE0AA` | Grounded, clear, and released signals |
+| Attention | `#FFC857` | Review, edit, and primary action signals |
+| Hold / block | `#FF6B6B` | Privacy, safety, and withheld signals |
+| Uncertainty | `#B494E8` | `insufficient_evidence` only |
 
-`DM Serif Display` gives release decisions and key headings a deliberate,
-human-readable voice. `DM Sans` is used for operational copy and `DM Mono` for
-policy values, timings, audit IDs, and decision-trace data.
+`DM Serif Display` is limited to product identity and the outcome headline.
+`DM Sans` carries readable explanation. `DM Mono` is applied consistently to
+all policy thresholds, IDs, timings, scores, telemetry, labels, and trace data.
 
-### Signature interaction: three lanes into one clearance
+### Signature: Control Tower convergence
 
-After an evaluation, the **Control Tower** renders the actual groundedness,
-safety/PII, and cost/performance outputs as three parallel lanes. Each lane
-shows its real score, status, and `duration_ms`; the total time comes from the
-API's `total_check_latency_ms`. The lanes converge on the policy result, making
-parallel evaluation legible without inventing false telemetry. The ordered API
-decision trace then reveals in sequence, so a judge can see exactly which rule
-led to `ALLOW`, `AUTO_EDIT`, `FLAG_FOR_HUMAN_REVIEW`, or `BLOCK`.
+The signature element is the **Control Tower**—three real parallel lanes for
+evidence, safety/privacy, and performance. They show the API-returned status,
+score, `duration_ms`, and `total_check_latency_ms`, then converge into the
+actual policy clearance. This is intentionally not a generic dashboard
+pattern: it visualizes the core concurrent mechanism of ControlPlane.ai rather
+than wrapping it in decorative charts.
 
-The visual treatment deliberately distinguishes **insufficient evidence** from
-an **unsupported claim**: the former receives an uncertainty state and plain
-language explaining that an approved source was not sufficient to verify the
-claim; it is never styled as a proven falsehood.
+The ordered API decision trace remains numbered because the number is real
+policy precedence. `insufficient_evidence` remains visibly different from an
+unsupported claim: it uses the dedicated uncertainty signal and says that an
+approved source was not sufficient to verify the claim. An `AUTO_EDIT` decision
+shows the restricted original alongside what an end user would actually see,
+with flagged content highlighted inline. Cost is displayed as actual versus
+policy budget instrumentation.
 
-For an `AUTO_EDIT`, the original restricted model response and the end-user
-replacement are shown side-by-side in the decision panel. Flagged spans are
-highlighted inside the original response. Cost telemetry is drawn as actual vs
-policy-budget instrumentation, not a generic KPI card.
+### What was intentionally removed
 
-Motion is limited to the Control Tower lane and trace reveal, and is disabled
-for users who prefer reduced motion. All controls retain a visible keyboard
-focus state and the layouts collapse intentionally for mobile.
+- Gradients from selected states and the CTA; emphasis now comes from flat,
+  meaningful status color and typographic weight.
+- The decorative live-evaluation hero card; the masthead is a compact wordmark
+  and engine readout so judges reach a real evaluation immediately.
+- The generic bar-chart logo, repeated numbered section circles, rounded-card
+  chrome, and metadata pills. Only decision states use a pill shape.
+- Repeated visual accessories from the policy selector, scenario console,
+  results, review queue, and audit table. Each keeps only the structural
+  divisions needed to operate it.
 
-### Screens
+After the “remove one accessory” check: policy cards retain only policy-relevant
+readouts; scenarios retain a single color square because it maps to risk type;
+the results view keeps the Control Tower because it explains concurrency; the
+review queue retains highlighted spans because reviewers need immediate context;
+the audit trail retains its compact mix bars because they show policy-dependent
+outcomes. Decorative preview cards, all other badges, and non-sequential
+numbers were removed.
 
-| Evaluation console | Control Tower + edited output | Review queue + audit dashboard |
+Motion is reserved for the Control Tower lane/clearance reveal and the ordered
+trace. It is disabled under `prefers-reduced-motion`. Every control has a
+visible keyboard focus treatment and the console collapses to a single-column
+operator flow on mobile.
+
+### Current interface captures
+
+| Landing / policy selection | Evaluation console | Control Tower result |
 | --- | --- | --- |
-| ![Policy selector and scenario console](screenshots/evaluation-console.png) | ![Parallel lanes converge into the AUTO EDIT decision](screenshots/auto-edit-control-tower.png) | ![Review queue and queryable audit table](screenshots/audit-and-review.png) |
+| ![Operator-console landing](screenshots/landing-console.png) | ![Scenario evaluation console](screenshots/evaluation-console.png) | ![Parallel check convergence and decision](screenshots/control-tower-results.png) |
+
+| Review queue | Audit trail |
+| --- | --- |
+| ![Reviewer queue with immediate flagged context](screenshots/review-queue.png) | ![Filterable audit log and decision mix](screenshots/audit-trail.png) |
+
+All screenshot paths above are repository-relative and render on GitHub.
 
 The frontend maintains a small, read-only copy of the public policy and fixture
 catalogue. This keeps the selector useful during the first Render free-tier
@@ -184,7 +210,7 @@ controlplane-ai/
 ├── frontend/
 │   ├── src/App.tsx                 # Dashboard and human review UI
 │   ├── src/api.ts                  # API client
-│   └── src/styles*.css             # Layered visual system / Control Tower UI
+│   └── src/styles.operator.css      # Flat mission-control visual system
 ├── screenshots/                    # Judge-facing UI captures used above
 └── README.md
 ```
