@@ -66,6 +66,8 @@ function App() {
   const [reviewerId, setReviewerId] = useState("demo-reviewer");
   const [reviewNote, setReviewNote] = useState("");
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [evaluationMessage, setEvaluationMessage] = useState("Running parallel checks...");
+  const [apiStatus, setApiStatus] = useState<"checking" | "ready" | "unavailable">("checking");
   const [error, setError] = useState("");
 
   const isCustom = scenarioId === "custom";
@@ -81,18 +83,23 @@ function App() {
     setReviews(nextReviews);
   }
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [nextPolicies, nextScenarios] = await Promise.all([api.getPolicies(), api.getScenarios()]);
-        setPolicies(nextPolicies);
-        setScenarios(nextScenarios);
-        await refreshRecords();
-      } catch {
-        setError("Unable to reach the API. Start the FastAPI server on port 8000, then refresh.");
-      }
+  async function loadData() {
+    setApiStatus("checking");
+    try {
+      const [nextPolicies, nextScenarios] = await Promise.all([api.getPolicies(), api.getScenarios()]);
+      setPolicies(nextPolicies);
+      setScenarios(nextScenarios);
+      await refreshRecords();
+      setApiStatus("ready");
+      setError("");
+    } catch {
+      setApiStatus("unavailable");
+      setError("Unable to reach the ControlPlane API. On Render's free tier, the first request after inactivity can take up to 60 seconds. Please wait, then retry.");
     }
-    void load();
+  }
+
+  useEffect(() => {
+    void loadData();
   }, []);
 
   function loadFixtureIntoSandbox() {
@@ -113,14 +120,26 @@ function App() {
     }
     setError("");
     setIsEvaluating(true);
+    setEvaluationMessage("Starting parallel policy checks...");
+    const wakingTimer = window.setTimeout(() => {
+      setEvaluationMessage("Connecting to the policy engine...");
+    }, 2500);
+    const coldStartTimer = window.setTimeout(() => {
+      setEvaluationMessage("Waking the free demo API — please keep this page open (up to 60 sec on first visit)...");
+    }, 8000);
     try {
       const nextResult = await api.evaluate({ use_case: useCase, ...payload });
       setResult(nextResult);
       await refreshRecords();
+      setApiStatus("ready");
     } catch {
-      setError("Evaluation failed. Confirm that the backend is running and try again.");
+      setApiStatus("unavailable");
+      setError("The policy API did not answer. If this is the first visit after inactivity, wait up to 60 seconds for Render to wake it, then select Retry connection.");
     } finally {
+      window.clearTimeout(wakingTimer);
+      window.clearTimeout(coldStartTimer);
       setIsEvaluating(false);
+      setEvaluationMessage("Running parallel checks...");
     }
   }
 
@@ -147,10 +166,10 @@ function App() {
           <h1>Trust every response<br /><em>before it ships.</em></h1>
           <p className="hero__copy">A policy-driven control plane that evaluates AI output in parallel, separates restricted content from user-facing output, and preserves an auditable decision record.</p>
         </div>
-        <div className="hero__badge"><span className="pulse"></span><div><small>Demo engine status</small><strong>Policy checks ready</strong></div><b>3</b></div>
+        <div className="hero__badge"><span className={`pulse pulse--${apiStatus}`}></span><div><small>Demo engine status</small><strong>{apiStatus === "ready" ? "Policy engine online" : apiStatus === "checking" ? "Connecting to API" : "API reconnect needed"}</strong></div><b>3</b></div>
       </header>
 
-      {error && <div className="alert" role="alert">{error}</div>}
+      {error && <div className="alert" role="alert"><span>{error}</span><button onClick={() => void loadData()}>Retry connection</button></div>}
 
       <section className="workspace">
         <div className="panel panel--controls">
@@ -177,7 +196,8 @@ function App() {
             <label>Simulated AI response<textarea value={customResponse} onChange={(event) => setCustomResponse(event.target.value)} maxLength={8000} /></label>
             <div className="telemetry-inputs"><label>Latency (ms)<input type="number" min="0" value={customTelemetry.latency_ms} onChange={(event) => setCustomTelemetry({ ...customTelemetry, latency_ms: numberOrZero(event.target.value) })} /></label><label>Tokens<input type="number" min="0" value={customTelemetry.token_count} onChange={(event) => setCustomTelemetry({ ...customTelemetry, token_count: numberOrZero(event.target.value) })} /></label><label>Retries<input type="number" min="0" value={customTelemetry.retry_count} onChange={(event) => setCustomTelemetry({ ...customTelemetry, retry_count: numberOrZero(event.target.value) })} /></label></div>
           </div> : <><div className="content-grid"><div><span className="content-label">User prompt</span><p>{activeScenario?.prompt ?? "Loading..."}</p></div><div><span className="content-label">Simulated AI response</span><p>{activeScenario?.response ?? "Loading..."}</p></div></div>{activeScenario && <div className="fixture-tools"><p className="fixture-meta">Fixture telemetry · {activeScenario.telemetry.latency_ms}ms · {activeScenario.telemetry.token_count} tokens · {activeScenario.telemetry.retry_count} retries</p><button className="text-button" onClick={loadFixtureIntoSandbox}>Edit in sandbox</button></div>}</>}
-          <button className="evaluate" onClick={() => void runEvaluation()} disabled={isEvaluating || (!isCustom && !activeScenario)}>{isEvaluating ? "Running parallel checks..." : "Evaluate response"}</button>
+          <button className="evaluate" onClick={() => void runEvaluation()} disabled={isEvaluating || (!isCustom && !activeScenario)}>{isEvaluating ? evaluationMessage : "Evaluate response"}</button>
+          {isEvaluating && <p className="evaluation-hint" role="status">The response remains held until the policy decision is complete.</p>}
         </div>
       </section>
 
