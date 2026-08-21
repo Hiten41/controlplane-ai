@@ -21,13 +21,13 @@ export const api = {
   getReviews: () => request<Audit[]>("/reviews"),
   evaluate: (payload: { use_case: UseCase; prompt: string; response: string; telemetry: Scenario["telemetry"] }) =>
     request<Evaluation>("/evaluate", { method: "POST", body: JSON.stringify(payload) }),
-  review: (auditId: string, action: "APPROVED" | "OVERRIDDEN") =>
+  review: (auditId: string, action: "APPROVED" | "OVERRIDDEN", reviewerId: string, overrideReason: string) =>
     request<Audit>(`/reviews/${auditId}`, {
       method: "POST",
       body: JSON.stringify({
-        reviewer_id: "demo-reviewer",
+        reviewer_id: reviewerId,
         action,
-        override_reason: action === "OVERRIDDEN" ? "Reviewer override recorded during demo." : null,
+        override_reason: overrideReason || null,
       }),
     }),
 };

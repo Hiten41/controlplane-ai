@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 
 Decision = Literal["ALLOW", "AUTO_EDIT", "FLAG_FOR_HUMAN_REVIEW", "BLOCK"]
+ReleaseStatus = Literal["RELEASED", "WITHHELD", "PENDING_REVIEW"]
 
 
 class TelemetryInput(BaseModel):
@@ -38,6 +39,13 @@ class CheckResult(BaseModel):
     details: dict[str, Any] = {}
 
 
+class DecisionTraceStep(BaseModel):
+    order: int
+    rule: str
+    outcome: str
+    detail: str
+
+
 class EvaluateResponse(BaseModel):
     audit_id: str
     use_case: str
@@ -45,6 +53,12 @@ class EvaluateResponse(BaseModel):
     checks: list[CheckResult]
     decision: Decision
     decision_reason: str
-    processed_response: str
+    # Operator-visible source content is intentionally separated from content
+    # that may be released outside the control plane.
+    raw_response: str
+    end_user_response: str | None
+    release_status: ReleaseStatus
+    decision_trace: list[DecisionTraceStep]
+    total_check_latency_ms: int
     review_required: bool
     created_at: str

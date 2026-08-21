@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_demo_scenarios, get_policies
-from app.database import initialize_database, list_audits, list_reviews, resolve_review
+from app.database import initialize_database, list_audit_events, list_audits, list_reviews, resolve_review
 from app.schemas import EvaluateRequest, EvaluateResponse, ReviewRequest
 from app.services.evaluation import evaluate
 
@@ -57,6 +57,11 @@ def audits(limit: int = Query(default=30, ge=1, le=100)) -> list[dict]:
     return list_audits(limit)
 
 
+@app.get("/api/audits/{audit_id}/events")
+def audit_events(audit_id: str) -> list[dict]:
+    return list_audit_events(audit_id)
+
+
 @app.get("/api/reviews")
 def reviews() -> list[dict]:
     return list_reviews()
@@ -64,7 +69,10 @@ def reviews() -> list[dict]:
 
 @app.post("/api/reviews/{audit_id}")
 def review_case(audit_id: str, request: ReviewRequest) -> dict:
-    result = resolve_review(audit_id, request.reviewer_id, request.action, request.override_reason)
+    try:
+        result = resolve_review(audit_id, request.reviewer_id, request.action, request.override_reason)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     if not result:
         raise HTTPException(status_code=404, detail="Review case not found")
     return result

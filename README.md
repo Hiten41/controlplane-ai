@@ -22,14 +22,22 @@ ControlPlane.ai sits at the model input/output boundary. It does not require acc
 | `FLAG_FOR_HUMAN_REVIEW` | A reviewer must approve or override the response. |
 | `BLOCK` | The response is withheld from the end user. |
 
+The UI makes the release boundary explicit: raw model output is restricted to the
+operator/audit view, while only `ALLOW` output or a safe `AUTO_EDIT` replacement
+is shown as released to an end user. A `FLAG_FOR_HUMAN_REVIEW` outcome is held
+pending a reviewer decision; it is never presented as released content.
+
 ## What the prototype demonstrates
 
-- **Three checks in parallel:** groundedness, safety/PII, and cost/performance.
+- **Three checks in parallel:** groundedness, safety/PII, and cost/performance, with per-check and total timing visible in the result.
 - **Configurable policy profiles:** customer support, internal knowledge assistant, and high-stakes decision support.
 - **Evidence-aware uncertainty:** `insufficient_evidence` is explicit; the system does not falsely claim verification when it cannot find a relevant approved source.
 - **Tiered intervention:** allow, automatic edit, review queue, or block.
-- **Traceability:** each evaluation creates a SQLite-backed audit record containing policy version, scores, evidence, reasons, telemetry, and reviewer activity.
-- **Human override:** review cases can be approved or overridden without losing the original decision trail.
+- **Decision precedence:** a visible trace proves why PII takes priority over evidence, safety, and budget outcomes when risks overlap.
+- **Release control:** blocked and review-held outputs cannot be shown as end-user responses.
+- **Traceability:** each evaluation creates a SQLite-backed audit record containing policy version, scores, evidence, reasons, telemetry, release state, and reviewer activity.
+- **Human override:** review cases can be approved or overridden with a reviewer identity and reason; review events append to the audit history.
+- **Custom sandbox:** judges can modify a fixture or enter their own prompt, response, and telemetry without changing code.
 
 ## Architecture
 
@@ -67,9 +75,10 @@ ControlPlane.ai sits at the model input/output boundary. It does not require acc
 1. An operator selects one of three use-case policy profiles.
 2. The gateway receives a prompt, AI response, and telemetry.
 3. The three checks run concurrently using `asyncio.gather`.
-4. The policy engine resolves overlapping risks using explicit precedence.
-5. The decision, evidence, highlighted risky spans, telemetry, and active policy version are written to the audit log.
-6. A flagged case appears in the reviewer queue; a reviewer can approve or override it.
+4. The policy engine resolves overlapping risks using explicit precedence: PII → safety/bias → evidence sufficiency → groundedness threshold → cost/performance.
+5. The engine assigns a release state (`RELEASED`, `WITHHELD`, or `PENDING_REVIEW`) separately from the decision label.
+6. The decision, trace, evidence, highlighted risky spans, telemetry, and active policy version are written to the audit log.
+7. A flagged case appears in the reviewer queue; a reviewer can approve or override it, creating a separate append-only review event.
 
 ## Policy profiles
 
@@ -85,8 +94,8 @@ This makes policy variation visible in the demo: the same unsupported return-pol
 
 | Check | Implementation | What it returns |
 | --- | --- | --- |
-| Groundedness | Transparent token-overlap similarity against five approved local evidence documents | score, confidence, sources, `grounded`, `unsupported_claim`, or `insufficient_evidence` |
-| Safety / PII | Explainable regex and pattern checks for emails, phone numbers, sensitive HR data, unsafe advice, and age bias | flags, PII entities, risky spans, severity |
+| Groundedness | Claim-level transparent token-overlap retrieval against five approved local evidence documents | evidence-match score, confidence, source freshness, `grounded`, `unsupported_claim`, or `insufficient_evidence` |
+| Safety / PII | Explainable configured pattern checks for emails, phone numbers, PAN-style IDs, names, sensitive HR data, unsafe advice, and age bias | flags, PII entities, risky spans, severity |
 | Cost / performance | Policy-budget comparison using telemetry | latency/tokens/retries, budget breach status |
 
 The design deliberately avoids using a second frontier model as a live judge for every request. The checks are inexpensive, explainable, and suitable for a controlled hackathon demonstration.
@@ -100,6 +109,7 @@ The design deliberately avoids using a second frontier model as a live judge for
 | PII leak | Email and phone detection | `BLOCK` |
 | Biased hiring suggestion | Human review versus strict blocking | `FLAG_FOR_HUMAN_REVIEW` or `BLOCK` |
 | Sensitive overlap case | Unverifiable personal/HR detail plus email | `insufficient_evidence` plus PII detection; `BLOCK` |
+| Cost and retry overrun | Telemetry budget enforcement | `FLAG_FOR_HUMAN_REVIEW` for customer support |
 
 ## Repository structure
 
@@ -108,7 +118,7 @@ controlplane-ai/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                 # FastAPI routes
-│   │   ├── database.py             # SQLite audit + review persistence
+│   │   ├── database.py             # SQLite audit, review, and event persistence
 │   │   ├── schemas.py              # Request/response models
 │   │   └── services/               # Checks, evaluator, policy engine
 │   ├── data/                       # Policies, evidence base, demo fixtures
@@ -162,7 +172,7 @@ cd backend
 python -m unittest discover -s tests -v
 ```
 
-The test suite validates all five demo cases, policy-dependent outcomes, and the concurrent-check pattern.
+The test suite validates all six demo cases, policy-dependent outcomes, release-state guarantees, append-only review events, and measured concurrent execution of all three evaluator checks.
 
 ### Frontend production build
 
@@ -179,6 +189,7 @@ pnpm build
 | `GET` | `/api/scenarios` | Return deterministic demo fixtures. |
 | `POST` | `/api/evaluate` | Run the three checks and create an audit entry. |
 | `GET` | `/api/audits` | Read recent audit records. |
+| `GET` | `/api/audits/{audit_id}/events` | Read the evaluation and human-review event history. |
 | `GET` | `/api/reviews` | Read review-queue cases. |
 | `POST` | `/api/reviews/{audit_id}` | Approve or override a review case. |
 
@@ -217,9 +228,9 @@ Example evaluation request:
 ## Assumptions and limitations
 
 - Groundedness is controlled evidence similarity, not universal truth verification.
-- Pattern-based safety detection is illustrative and must be expanded before real-world use.
+- Pattern-based safety detection is illustrative and must be expanded before real-world use; it deliberately avoids claiming coverage of every PII or safety category.
 - This is not production software or a substitute for legal, regulatory, clinical, HR, or security review.
-- A future enterprise implementation would add role-based access controls, encrypted audit retention, governed connectors, policy management workflows, detection evaluation, and monitoring.
+- A future enterprise implementation would add authentication/RBAC, encrypted audit retention, governed connectors, policy management workflows, detection evaluation, and monitoring.
 
 ## Team
 

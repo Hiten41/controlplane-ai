@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import UTC, datetime
+from time import perf_counter
 
 from app.config import get_policies
 from app.database import save_audit
@@ -11,32 +12,42 @@ from app.services.checks import cost_performance_check, default_telemetry, groun
 from app.services.policy_engine import decide
 
 
-async def evaluate(request: EvaluateRequest) -> EvaluateResponse:
+async def _timed_check(coroutine):
+    started = perf_counter()
+    result = await coroutine
+    result.details["duration_ms"] = round((perf_counter() - started) * 1000, 1)
+    return result
+
+
+async def evaluate(request: EvaluateRequest, persist: bool = True) -> EvaluateResponse:
     policy = get_policies()[request.use_case]
     telemetry = request.telemetry or default_telemetry(request.response)
+    check_started = perf_counter()
     checks = list(
         await asyncio.gather(
-            groundedness_check(request.response),
-            safety_pii_check(request.response),
-            cost_performance_check(telemetry, policy),
+            _timed_check(groundedness_check(request.response)),
+            _timed_check(safety_pii_check(request.response)),
+            _timed_check(cost_performance_check(telemetry, policy)),
         )
     )
-    decision, decision_reason, processed_response = decide(checks, policy, request.response)
+    total_check_latency_ms = round((perf_counter() - check_started) * 1000)
+    outcome = decide(checks, policy, request.response)
     created_at = datetime.now(UTC).isoformat()
     audit_id = str(uuid.uuid4())
     groundedness = next(check for check in checks if check.name == "groundedness")
     safety = next(check for check in checks if check.name == "safety_pii")
     performance = next(check for check in checks if check.name == "cost_performance")
 
-    save_audit(
-        {
+    record = {
             "audit_id": audit_id,
             "created_at": created_at,
             "use_case": request.use_case,
             "policy_version_used": policy["version"],
             "input_prompt": request.prompt,
             "ai_response": request.response,
-            "processed_response": processed_response,
+            "processed_response": outcome.end_user_response or "",
+            "end_user_response": outcome.end_user_response,
+            "release_status": outcome.release_status,
             "groundedness_score": groundedness.score,
             "groundedness_confidence": groundedness.confidence,
             "groundedness_status": groundedness.status,
@@ -48,19 +59,25 @@ async def evaluate(request: EvaluateRequest) -> EvaluateResponse:
             "cost_token_count": telemetry.token_count,
             "retry_count": telemetry.retry_count,
             "cost_budget_breached": performance.details["budget_breached"],
-            "final_decision": decision,
-            "decision_reason": decision_reason,
+            "final_decision": outcome.decision,
+            "decision_reason": outcome.reason,
+            "decision_trace": [step.model_dump() for step in outcome.trace],
             "flagged_spans": list({span for check in checks for span in check.flagged_spans}),
-        }
-    )
+    }
+    if persist:
+        save_audit(record)
     return EvaluateResponse(
         audit_id=audit_id,
         use_case=request.use_case,
         policy=policy,
         checks=checks,
-        decision=decision,
-        decision_reason=decision_reason,
-        processed_response=processed_response,
-        review_required=decision == "FLAG_FOR_HUMAN_REVIEW",
+        decision=outcome.decision,
+        decision_reason=outcome.reason,
+        raw_response=request.response,
+        end_user_response=outcome.end_user_response,
+        release_status=outcome.release_status,
+        decision_trace=outcome.trace,
+        total_check_latency_ms=total_check_latency_ms,
+        review_required=outcome.decision == "FLAG_FOR_HUMAN_REVIEW",
         created_at=created_at,
     )

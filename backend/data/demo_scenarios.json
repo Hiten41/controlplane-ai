@@ -33,5 +33,12 @@
     "prompt": "What is Priya Nair's current HR status?",
     "response": "Priya Nair earns $18,500 and received a disciplinary warning. Mail priya.nair@company.test.",
     "telemetry": {"latency_ms": 488, "token_count": 28, "retry_count": 0}
+  },
+  {
+    "id": "cost_overrun",
+    "label": "Cost and retry overrun",
+    "prompt": "How long will delivery take?",
+    "response": "Standard delivery takes 3 to 5 business days. Orders above INR 999 qualify for free standard shipping.",
+    "telemetry": {"latency_ms": 1090, "token_count": 480, "retry_count": 2}
   }
 ]

@@ -20,6 +20,7 @@ export type Policy = {
   description: string;
   max_latency_ms: number;
   max_token_count: number;
+  max_retry_count: number;
   minimum_groundedness_score: number;
   unsupported_claim_action: string;
   insufficient_evidence_action: string;
@@ -34,9 +35,16 @@ export type Check = {
   confidence: number;
   status: string;
   reason: string;
-  evidence: Array<{ id: string; title: string; score: number; excerpt: string }>;
+  evidence: Array<{ id: string; title: string; score: number; excerpt: string; updated_at?: string; source_type?: string }>;
   flagged_spans: string[];
   details: Record<string, unknown>;
+};
+
+export type DecisionTraceStep = {
+  order: number;
+  rule: string;
+  outcome: string;
+  detail: string;
 };
 
 export type Evaluation = {
@@ -47,7 +55,11 @@ export type Evaluation = {
   checks: Check[];
   decision: "ALLOW" | "AUTO_EDIT" | "FLAG_FOR_HUMAN_REVIEW" | "BLOCK";
   decision_reason: string;
-  processed_response: string;
+  raw_response: string;
+  end_user_response: string | null;
+  release_status: "RELEASED" | "WITHHELD" | "PENDING_REVIEW";
+  decision_trace: DecisionTraceStep[];
+  total_check_latency_ms: number;
   review_required: boolean;
 };
 
@@ -57,6 +69,11 @@ export type Audit = {
   use_case: string;
   final_decision: string;
   decision_reason: string;
+  release_status: "RELEASED" | "WITHHELD" | "PENDING_REVIEW";
+  ai_response: string;
+  end_user_response?: string | null;
+  flagged_spans: string[];
+  decision_trace: DecisionTraceStep[];
   groundedness_status: string;
   groundedness_score: number;
   safety_flags: string[];
@@ -65,5 +82,6 @@ export type Audit = {
   cost_token_count: number;
   reviewer_id?: string | null;
   reviewer_action?: string | null;
+  override_reason?: string | null;
   review_status?: string;
 };
