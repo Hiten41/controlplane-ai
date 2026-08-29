@@ -14,6 +14,14 @@ export type Scenario = {
   telemetry: Telemetry;
 };
 
+export type GeneratedResponse = {
+  response: string;
+  latency_ms: number;
+  token_count: number;
+  retry_count: number;
+  provider: "gemini";
+};
+
 export type Policy = {
   label: string;
   version: string;

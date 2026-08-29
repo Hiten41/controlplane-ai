@@ -8,8 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_demo_scenarios, get_policies
 from app.database import initialize_database, list_audit_events, list_audits, list_reviews, resolve_review
-from app.schemas import EvaluateRequest, EvaluateResponse, ReviewRequest
+from app.schemas import EvaluateRequest, EvaluateResponse, GenerateRequest, GenerateResponse, ReviewRequest
 from app.services.evaluation import evaluate
+from app.services.gemini import GeminiUnavailableError, generate_with_gemini
 
 
 @asynccontextmanager
@@ -57,6 +58,15 @@ def scenarios() -> list[dict]:
 @app.post("/api/evaluate", response_model=EvaluateResponse)
 async def evaluate_response(request: EvaluateRequest) -> EvaluateResponse:
     return await evaluate(request)
+
+
+@app.post("/api/generate", response_model=GenerateResponse)
+async def generate_response(request: GenerateRequest) -> GenerateResponse:
+    try:
+        generated = await generate_with_gemini(request.prompt)
+    except GeminiUnavailableError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    return GenerateResponse(**generated, provider="gemini")
 
 
 @app.get("/api/audits")

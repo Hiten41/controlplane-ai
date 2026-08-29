@@ -22,6 +22,18 @@ class EvaluateRequest(BaseModel):
     telemetry: TelemetryInput | None = None
 
 
+class GenerateRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=5000)
+
+
+class GenerateResponse(BaseModel):
+    response: str
+    latency_ms: int = Field(ge=0)
+    token_count: int = Field(ge=0)
+    retry_count: int = Field(ge=0)
+    provider: Literal["gemini"]
+
+
 class ReviewRequest(BaseModel):
     reviewer_id: str = Field(min_length=1, max_length=100)
     action: Literal["APPROVED", "OVERRIDDEN"]

@@ -241,6 +241,24 @@ For a deployed frontend, add its URL as a comma-separated backend environment va
 ALLOWED_ORIGINS=https://your-frontend.onrender.com
 ```
 
+### Optional: enable live Gemini responses
+
+The **Try your own** sandbox works without a model key using labelled local demo
+responses. To generate real responses before ControlPlane evaluates them, set the
+following environment variable on the **Render backend service** (never in the
+frontend or GitHub repository):
+
+```env
+GEMINI_API_KEY=your_key_from_google_ai_studio
+# Optional. The backend defaults to gemini-2.5-flash.
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+With the key configured, the sandbox labels generated output as **Gemini** and
+automatically sends that model output through the same evidence, safety/PII, and
+performance checks. If Gemini is unavailable, it transparently returns to the
+local demo simulation. Get a key through [Google AI Studio](https://ai.google.dev/gemini-api/docs/get-started).
+
 ### 2. Start the React frontend
 
 Open another terminal:
@@ -269,6 +287,13 @@ The test suite validates all six demo cases, policy-dependent outcomes, release-
 ```powershell
 cd frontend
 pnpm build
+```
+
+### Frontend simulation checks
+
+```powershell
+cd frontend
+pnpm test:simulation
 ```
 
 ## API summary

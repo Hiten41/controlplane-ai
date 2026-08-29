@@ -1,4 +1,4 @@
-import type { Audit, Evaluation, Policy, Scenario, UseCase } from "./types";
+import type { Audit, Evaluation, GeneratedResponse, Policy, Scenario, UseCase } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api";
 
@@ -19,6 +19,7 @@ export const api = {
   getScenarios: () => request<Scenario[]>("/scenarios"),
   getAudits: () => request<Audit[]>("/audits"),
   getReviews: () => request<Audit[]>("/reviews"),
+  generate: (prompt: string) => request<GeneratedResponse>("/generate", { method: "POST", body: JSON.stringify({ prompt }) }),
   evaluate: (payload: { use_case: UseCase; prompt: string; response: string; telemetry: Scenario["telemetry"] }) =>
     request<Evaluation>("/evaluate", { method: "POST", body: JSON.stringify(payload) }),
   review: (auditId: string, action: "APPROVED" | "OVERRIDDEN", reviewerId: string, overrideReason: string) =>
