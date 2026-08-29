@@ -1,6 +1,6 @@
 import type { Telemetry } from "./types";
 
-export type SimulationKind = "pii" | "unsupported" | "bias" | "cost" | "grounded";
+export type SimulationKind = "pii" | "unsupported" | "bias" | "cost" | "grounded" | "guide";
 
 // These lists intentionally use stems and natural phrasing, not only exact keywords.
 // They are exported so the sandbox behaviour can be reviewed and tested independently.
@@ -22,6 +22,11 @@ export const POLICY_INTENT = [
 export const COST_INTENT = [
   "slow", "timeout", "time out", "timing", "retry", "lag", "expensive", "budget",
   "taking long", "stuck", "waited", "delay",
+] as const;
+
+export const GENERAL_INTENT = [
+  "what should i do", "what shud i do", "today", "hello", "hi", "help me", "tell me something",
+  "how are you", "weather", "joke", "thank you",
 ] as const;
 
 export const QUESTION_PHRASES = ["what is", "what's", "whts", "can you tell me", "how do i"] as const;
@@ -48,6 +53,7 @@ export function classifySimulationIntent(prompt: string): SimulationKind {
   if (matchesAny(prompt, PII_INTENT) || CAPITALIZED_NAME.test(prompt)) return "pii";
   if (matchesAny(prompt, BIAS_INTENT)) return "bias";
   if (matchesAny(prompt, POLICY_INTENT)) return "unsupported";
+  if (matchesAny(prompt, GENERAL_INTENT)) return "guide";
   return "grounded";
 }
 
@@ -63,6 +69,8 @@ export function simulateResponse(prompt: string): string {
     case "cost":
     case "grounded":
       return "Standard delivery takes 3 to 5 business days. Orders above INR 999 receive free standard shipping.";
+    case "guide":
+      return "This demo simulates customer-support AI responses. Try asking about delivery, returns, refunds, contact details, or a hiring decision to see how ControlPlane checks the reply.";
   }
 }
 
@@ -72,6 +80,7 @@ export function simulateTelemetry(prompt: string): Telemetry {
     case "pii": return { latency_ms: 360, token_count: 24, retry_count: 0 };
     case "bias": return { latency_ms: 410, token_count: 20, retry_count: 0 };
     case "unsupported": return { latency_ms: 420, token_count: 25, retry_count: 0 };
+    case "guide": return { latency_ms: 280, token_count: 22, retry_count: 0 };
     default: return { latency_ms: 300, token_count: 18, retry_count: 0 };
   }
 }
