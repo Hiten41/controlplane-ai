@@ -50,7 +50,7 @@ def _generate_sync(prompt: str) -> dict[str, int | str]:
             403: "Gemini access is not enabled for this API key.",
             404: "The configured Gemini model is unavailable.",
             429: "Gemini request quota is currently exhausted.",
-        }.get(error.code, "Gemini could not generate a response right now.")
+        }.get(error.code, f"Gemini returned HTTP {error.code}.")
         raise GeminiUnavailableError(message) from error
     except (URLError, TimeoutError) as error:
         raise GeminiUnavailableError("Gemini could not generate a response right now.") from error
