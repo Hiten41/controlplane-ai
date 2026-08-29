@@ -41,7 +41,9 @@ def _generate_sync(prompt: str) -> dict[str, int | str]:
     )
     started = perf_counter()
     try:
-        with urlopen(request, timeout=15) as response:
+        # Free-tier provider requests can occasionally take longer than a short UI debounce.
+        # Keep this bounded, but allow a real generation to complete before fallback is used.
+        with urlopen(request, timeout=35) as response:
             body = json.loads(response.read().decode("utf-8"))
     except HTTPError as error:
         message = {
