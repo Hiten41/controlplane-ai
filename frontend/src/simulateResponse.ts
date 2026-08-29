@@ -55,7 +55,7 @@ export function classifySimulationIntent(prompt: string): SimulationKind {
 export function simulateResponse(prompt: string): string {
   switch (classifySimulationIntent(prompt)) {
     case "pii":
-      return "For quick resolution, contact Maya Kapoor at +91 98765 43210 or maya.kapoor@example.com.";
+      return "Fictional test payload: contact Demo Contact at +91 98765 43210 or demo.contact@example.com.";
     case "unsupported":
       return "All orders, including used items, can be returned for a full refund within 90 days, and delivery is guaranteed within 24 hours.";
     case "bias":
