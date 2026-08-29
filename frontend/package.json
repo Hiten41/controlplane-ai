@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test:simulation": "node scripts/test-simulate-response.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
