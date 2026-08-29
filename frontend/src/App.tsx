@@ -340,7 +340,7 @@ function App() {
               const meta = scenarioMeta[scenario.id] ?? { signal: "Scenario", description: scenario.label, tone: "clear" as const };
               return <button key={scenario.id} className={`scenario-card scenario-card--${meta.tone} ${scenario.id === scenarioId ? "scenario-card--active" : ""}`} onClick={() => selectScenario(scenario.id)} aria-pressed={scenario.id === scenarioId}><span>{meta.signal}</span><strong>{scenario.label}</strong><small>{meta.description}</small></button>;
             })}
-            <button className={`scenario-card scenario-card--custom ${isCustom ? "scenario-card--active" : ""}`} onClick={() => selectScenario("custom")} aria-pressed={isCustom}><span>Sandbox</span><strong>Try your own</strong><small>Paste a prompt, response, and telemetry.</small></button>
+            <button className={`scenario-card scenario-card--custom ${isCustom ? "scenario-card--active" : ""}`} onClick={() => selectScenario("custom")} aria-pressed={isCustom}><span>Sandbox</span><strong>Try your own</strong><small>Enter a prompt; the demo generates the rest.</small></button>
           </div>
           {isCustom ? <div className="sandbox-grid">
             <label>User prompt<textarea value={customPrompt} onChange={(event) => { setCustomPrompt(event.target.value); setResult(null); }} maxLength={5000} /></label>
@@ -349,7 +349,7 @@ function App() {
             <div className="telemetry-inputs"><label>Latency (ms)<input type="number" value={customTelemetry.latency_ms} readOnly aria-readonly="true" /></label><label>Tokens<input type="number" value={customTelemetry.token_count} readOnly aria-readonly="true" /></label><label>Retries<input type="number" value={customTelemetry.retry_count} readOnly aria-readonly="true" /></label></div>
           </div> : <><div className="content-grid"><div><span className="content-label">User prompt</span><p>{activeScenario?.prompt ?? "Loading..."}</p></div><div><span className="content-label">Simulated AI response</span><p>{activeScenario?.response ?? "Loading..."}</p></div></div>{activeScenario && <div className="fixture-tools"><p className="fixture-meta">Fixture telemetry · {activeScenario.telemetry.latency_ms}ms · {activeScenario.telemetry.token_count} tokens · {activeScenario.telemetry.retry_count} retries</p><button className="text-button" onClick={loadFixtureIntoSandbox}>Edit in sandbox</button></div>}</>}
           <ol className={`evaluation-pipeline evaluation-pipeline--${evaluationPhase}`} aria-label="Evaluation pipeline"><li><span></span><div><b>Evidence</b><small>Approved-source match</small></div></li><li><span></span><div><b>Safety</b><small>PII, bias, unsafe content</small></div></li><li><span></span><div><b>Performance</b><small>Latency, tokens, retries</small></div></li></ol>
-          <button className="evaluate" onClick={() => void runEvaluation()} disabled={isEvaluating || (!isCustom && !activeScenario)}>{isEvaluating ? evaluationMessage : "Evaluate response"}</button>
+          <button className="evaluate" onClick={() => void runEvaluation()} disabled={isEvaluating || isGeneratingResponse || (!isCustom && !activeScenario)}>{isEvaluating ? evaluationMessage : isGeneratingResponse ? "Generating demo response..." : "Check response"}</button>
           {isEvaluating && <p className="evaluation-hint" role="status">The response remains held until the policy decision is complete.</p>}
         </div>
       </section>

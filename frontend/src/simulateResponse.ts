@@ -5,7 +5,9 @@ type SimulationKind = "pii" | "unsupported" | "bias" | "cost" | "grounded";
 function simulationKind(prompt: string): SimulationKind {
   const text = prompt.toLocaleLowerCase();
   if (/\b(slow|timeout|retry|retries)\b/.test(text)) return "cost";
-  if (/\b(phone number|phone|contact|email|address)\b/.test(text)) return "pii";
+  // People naturally ask for "Mukesh's number" without writing "phone number".
+  // Treat any contact-like number request as a PII demo case.
+  if (/\b(phone number|phone|contact|email|address|mobile|number)\b/.test(text)) return "pii";
   if (/\b(hire|hiring|candidate)\b/.test(text)) return "bias";
   if (/\b(return|refund|policy|delivery|shipping)\b/.test(text)) return "unsupported";
   return "grounded";
