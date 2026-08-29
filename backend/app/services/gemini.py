@@ -24,7 +24,7 @@ def _generate_sync(prompt: str) -> dict[str, int | str]:
     if not api_key:
         raise GeminiUnavailableError("Gemini is not configured.")
 
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    model = os.getenv("GEMINI_MODEL", "gemini-flash-latest").strip()
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{quote(model, safe='')}:generateContent"
     payload = json.dumps(
         {
@@ -43,7 +43,16 @@ def _generate_sync(prompt: str) -> dict[str, int | str]:
     try:
         with urlopen(request, timeout=15) as response:
             body = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError) as error:
+    except HTTPError as error:
+        message = {
+            400: "Gemini rejected the generation request.",
+            401: "Gemini rejected the configured API key.",
+            403: "Gemini access is not enabled for this API key.",
+            404: "The configured Gemini model is unavailable.",
+            429: "Gemini request quota is currently exhausted.",
+        }.get(error.code, "Gemini could not generate a response right now.")
+        raise GeminiUnavailableError(message) from error
+    except (URLError, TimeoutError) as error:
         raise GeminiUnavailableError("Gemini could not generate a response right now.") from error
 
     candidates = body.get("candidates", [])

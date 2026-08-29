@@ -250,8 +250,8 @@ frontend or GitHub repository):
 
 ```env
 GEMINI_API_KEY=your_key_from_google_ai_studio
-# Optional. The backend defaults to gemini-2.5-flash.
-GEMINI_MODEL=gemini-2.5-flash
+# Optional. The backend defaults to gemini-flash-latest.
+GEMINI_MODEL=gemini-flash-latest
 ```
 
 With the key configured, the sandbox labels generated output as **Gemini** and
