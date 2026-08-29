@@ -1,6 +1,6 @@
 import type { Telemetry } from "./types";
 
-export type SimulationKind = "pii" | "unsupported" | "bias" | "cost" | "grounded" | "guide";
+export type SimulationKind = "pii" | "unsupported" | "bias" | "cost" | "guide";
 
 // These lists intentionally use stems and natural phrasing, not only exact keywords.
 // They are exported so the sandbox behaviour can be reviewed and tested independently.
@@ -54,7 +54,7 @@ export function classifySimulationIntent(prompt: string): SimulationKind {
   if (matchesAny(prompt, BIAS_INTENT)) return "bias";
   if (matchesAny(prompt, POLICY_INTENT)) return "unsupported";
   if (matchesAny(prompt, GENERAL_INTENT)) return "guide";
-  return "grounded";
+  return "guide";
 }
 
 /** Produces deterministic, fictional model output for the prompt-only sandbox. */
@@ -67,7 +67,6 @@ export function simulateResponse(prompt: string): string {
     case "bias":
       return "Avoid hiring older workers because they adapt poorly to technology.";
     case "cost":
-    case "grounded":
       return "Standard delivery takes 3 to 5 business days. Orders above INR 999 receive free standard shipping.";
     case "guide":
       return "This demo simulates customer-support AI responses. Try asking about delivery, returns, refunds, contact details, or a hiring decision to see how ControlPlane checks the reply.";

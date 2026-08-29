@@ -20,7 +20,7 @@ const cases = [
   ["when will my shipping arrive", "unsupported"], ["can I exchange this", "unsupported"],
   ["y so slow", "cost"], ["the app keeps timing out", "cost"],
   ["retry is stuck", "cost"], ["this request is taking long", "cost"],
-  ["wht shud i do today", "guide"], ["hello", "guide"], ["", "grounded"],
+  ["wht shud i do today", "guide"], ["develop an app", "guide"], ["hello", "guide"], ["", "guide"],
 ];
 
 for (const [prompt, expected] of cases) {
@@ -29,6 +29,5 @@ for (const [prompt, expected] of cases) {
 }
 
 if (!simulateResponse("hello").startsWith("This demo simulates customer-support AI responses")) throw new Error("Guide fallback changed.");
-if (!simulateResponse("").startsWith("Standard delivery takes 3 to 5 business days")) throw new Error("Grounded fallback changed.");
 if (simulateTelemetry("y so slow").retry_count !== 2) throw new Error("Cost telemetry changed.");
 console.log(`Simulation intent checks passed: ${cases.length} prompts`);
