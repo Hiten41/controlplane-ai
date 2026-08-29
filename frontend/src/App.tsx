@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { api } from "./api";
 import { demoPolicies, demoScenarios } from "./demoCatalog";
+import { simulateResponse, simulateTelemetry } from "./simulateResponse";
 import type { Audit, Check, Evaluation, Policy, Scenario, Telemetry, UseCase } from "./types";
 
 const useCaseOrder: UseCase[] = ["customer_support", "internal_knowledge_assistant", "decision_support"];
@@ -144,28 +145,6 @@ function formatTimestamp(value: string) {
   return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
-function numberOrZero(value: string) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 0;
-}
-
-function safeDraftFromPrompt(prompt: string) {
-  const text = prompt.toLocaleLowerCase();
-  if (/phone|email|contact|address|personal details|mobile number/.test(text)) {
-    return "I can’t share someone’s private contact details. Please use the official support channel or ask the person to contact you directly.";
-  }
-  if (/hire|hiring|candidate|age|gender|religion|caste/.test(text)) {
-    return "I can help assess candidates using job-relevant skills, experience, and structured interview criteria. Personal characteristics should not influence the decision.";
-  }
-  if (/return|refund|exchange/.test(text)) {
-    return "I can help check the return policy. Please confirm the product, order date, and whether the item is unused so support can give you a verified answer.";
-  }
-  if (/delivery|shipping|arrive|dispatch/.test(text)) {
-    return "I can help with delivery information. Please share the order reference through the official support flow so the latest status can be verified.";
-  }
-  return "I don’t have enough verified information to answer that safely. Please check an approved source or contact support for a confirmed answer.";
-}
-
 function App() {
   const [policies, setPolicies] = useState<Record<UseCase, Policy> | null>(demoPolicies);
   const [scenarios, setScenarios] = useState<Scenario[]>(demoScenarios);
@@ -181,6 +160,7 @@ function App() {
   const [reviewerId, setReviewerId] = useState("demo-reviewer");
   const [reviewNote, setReviewNote] = useState("");
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
   const [evaluationMessage, setEvaluationMessage] = useState("Running parallel checks...");
   const [evaluationPhase, setEvaluationPhase] = useState<"idle" | "checking" | "waiting" | "complete">("idle");
   const [apiStatus, setApiStatus] = useState<"checking" | "ready" | "unavailable">("checking");
@@ -253,11 +233,16 @@ function App() {
     setResult(null);
   }
 
-  function updateCustomPrompt(value: string) {
-    setCustomPrompt(value);
-    setCustomResponse(safeDraftFromPrompt(value));
-    setResult(null);
-  }
+  useEffect(() => {
+    if (!isCustom) return;
+    setIsGeneratingResponse(true);
+    const timer = window.setTimeout(() => {
+      setCustomResponse(simulateResponse(customPrompt));
+      setCustomTelemetry(simulateTelemetry(customPrompt));
+      setIsGeneratingResponse(false);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [customPrompt, isCustom]);
 
   function selectPolicy(profile: UseCase) {
     setUseCase(profile);
@@ -358,10 +343,10 @@ function App() {
             <button className={`scenario-card scenario-card--custom ${isCustom ? "scenario-card--active" : ""}`} onClick={() => selectScenario("custom")} aria-pressed={isCustom}><span>Sandbox</span><strong>Try your own</strong><small>Paste a prompt, response, and telemetry.</small></button>
           </div>
           {isCustom ? <div className="sandbox-grid">
-            <label>User prompt<textarea value={customPrompt} onChange={(event) => updateCustomPrompt(event.target.value)} maxLength={5000} /></label>
-            <label>Suggested safe response<textarea value={customResponse} onChange={(event) => setCustomResponse(event.target.value)} maxLength={8000} /></label>
-            <div className="sandbox-draft-note"><span>Safe draft</span><p>We update this draft when the prompt changes, using the selected policy context. You can still edit it before checking it.</p><button type="button" className="text-button" onClick={() => setCustomResponse(safeDraftFromPrompt(customPrompt))}>Refresh safe draft</button></div>
-            <div className="telemetry-inputs"><label>Latency (ms)<input type="number" min="0" value={customTelemetry.latency_ms} onChange={(event) => setCustomTelemetry({ ...customTelemetry, latency_ms: numberOrZero(event.target.value) })} /></label><label>Tokens<input type="number" min="0" value={customTelemetry.token_count} onChange={(event) => setCustomTelemetry({ ...customTelemetry, token_count: numberOrZero(event.target.value) })} /></label><label>Retries<input type="number" min="0" value={customTelemetry.retry_count} onChange={(event) => setCustomTelemetry({ ...customTelemetry, retry_count: numberOrZero(event.target.value) })} /></label></div>
+            <label>User prompt<textarea value={customPrompt} onChange={(event) => { setCustomPrompt(event.target.value); setResult(null); }} maxLength={5000} /></label>
+            <label>Simulated AI response<textarea value={customResponse} readOnly aria-readonly="true" maxLength={8000} /></label>
+            <div className="sandbox-draft-note"><span>{isGeneratingResponse ? "Generating" : "Demo simulation"}</span><p>Auto-generated for demo purposes. This is simulated output, not a live model call.</p></div>
+            <div className="telemetry-inputs"><label>Latency (ms)<input type="number" value={customTelemetry.latency_ms} readOnly aria-readonly="true" /></label><label>Tokens<input type="number" value={customTelemetry.token_count} readOnly aria-readonly="true" /></label><label>Retries<input type="number" value={customTelemetry.retry_count} readOnly aria-readonly="true" /></label></div>
           </div> : <><div className="content-grid"><div><span className="content-label">User prompt</span><p>{activeScenario?.prompt ?? "Loading..."}</p></div><div><span className="content-label">Simulated AI response</span><p>{activeScenario?.response ?? "Loading..."}</p></div></div>{activeScenario && <div className="fixture-tools"><p className="fixture-meta">Fixture telemetry · {activeScenario.telemetry.latency_ms}ms · {activeScenario.telemetry.token_count} tokens · {activeScenario.telemetry.retry_count} retries</p><button className="text-button" onClick={loadFixtureIntoSandbox}>Edit in sandbox</button></div>}</>}
           <ol className={`evaluation-pipeline evaluation-pipeline--${evaluationPhase}`} aria-label="Evaluation pipeline"><li><span></span><div><b>Evidence</b><small>Approved-source match</small></div></li><li><span></span><div><b>Safety</b><small>PII, bias, unsafe content</small></div></li><li><span></span><div><b>Performance</b><small>Latency, tokens, retries</small></div></li></ol>
           <button className="evaluate" onClick={() => void runEvaluation()} disabled={isEvaluating || (!isCustom && !activeScenario)}>{isEvaluating ? evaluationMessage : "Evaluate response"}</button>
