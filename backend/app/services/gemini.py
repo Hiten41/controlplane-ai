@@ -5,7 +5,6 @@ import json
 import os
 from time import perf_counter
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 
@@ -24,13 +23,17 @@ def _generate_sync(prompt: str) -> dict[str, int | str]:
     if not api_key:
         raise GeminiUnavailableError("Gemini is not configured.")
 
-    model = os.getenv("GEMINI_MODEL", "gemini-flash-latest").strip()
-    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{quote(model, safe='')}:generateContent"
+    # Gemini now issues authorization (AQ.) keys by default. Those keys use the
+    # current Interactions API rather than the legacy generateContent request
+    # shape used by this prototype originally.
+    model = os.getenv("GEMINI_MODEL", "gemini-3.7-flash").strip()
+    endpoint = "https://generativelanguage.googleapis.com/v1beta/interactions"
     payload = json.dumps(
         {
-            "system_instruction": {"parts": [{"text": SYSTEM_INSTRUCTION}]},
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 220},
+            "model": model,
+            "system_instruction": SYSTEM_INSTRUCTION,
+            "input": prompt,
+            "generation_config": {"temperature": 0.4, "max_output_tokens": 220},
         }
     ).encode("utf-8")
     request = Request(
@@ -57,16 +60,20 @@ def _generate_sync(prompt: str) -> dict[str, int | str]:
     except (URLError, TimeoutError) as error:
         raise GeminiUnavailableError("Gemini could not generate a response right now.") from error
 
-    candidates = body.get("candidates", [])
-    parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
-    text = "".join(part.get("text", "") for part in parts).strip()
+    output_steps = [step for step in body.get("steps", []) if step.get("type") == "model_output"]
+    parts = [part for step in output_steps for part in step.get("content", [])]
+    text = "".join(part.get("text", "") for part in parts if isinstance(part, dict)).strip()
     if not text:
         raise GeminiUnavailableError("Gemini returned no usable text.")
-    usage = body.get("usageMetadata", {})
+    usage = body.get("usage", {})
     return {
         "response": text,
         "latency_ms": max(1, round((perf_counter() - started) * 1000)),
-        "token_count": int(usage.get("totalTokenCount") or max(1, len(text.split()))),
+        "token_count": int(
+            usage.get("total_tokens")
+            or usage.get("totalTokenCount")
+            or max(1, len(text.split()))
+        ),
         "retry_count": 0,
     }
 
