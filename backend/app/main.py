@@ -63,7 +63,7 @@ async def evaluate_response(request: EvaluateRequest) -> EvaluateResponse:
 @app.post("/api/generate", response_model=GenerateResponse)
 async def generate_response(request: GenerateRequest) -> GenerateResponse:
     try:
-        generated = await generate_with_gemini(request.prompt)
+        generated = await generate_with_gemini(request.prompt, experimental=request.experimental)
     except GeminiUnavailableError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     return GenerateResponse(**generated, provider="gemini")

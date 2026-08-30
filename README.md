@@ -250,14 +250,19 @@ frontend or GitHub repository):
 
 ```env
 GEMINI_API_KEY=your_key_from_google_ai_studio
-# Optional. The backend uses Gemini's current Interactions API by default.
-GEMINI_MODEL=gemini-3.7-flash
+# Optional. Stable live-demo model used by the opt-in sandbox toggle.
+GEMINI_MODEL=gemini-2.5-flash-lite
+# Optional. Kept separate for an experimental model path; never used by default.
+GEMINI_EXPERIMENTAL_MODEL=gemini-3.7-flash
 ```
 
-With the key configured, the sandbox labels generated output as **Gemini** and
-automatically sends that model output through the same evidence, safety/PII, and
-performance checks. If Gemini is unavailable, it transparently returns to the
-local demo simulation. Get a key through [Google AI Studio](https://ai.google.dev/gemini-api/docs/get-started).
+The sandbox starts in **Simulated (demo mode)**: a local, deterministic response
+generator that is fast and reliable for judging. A judge can explicitly enable
+**Try live Gemini (experimental)** to request Gemini 2.5 Flash-Lite. Live calls
+use at most two short retries for transient provider errors and a total budget
+below four seconds; any failure silently returns to the same labelled demo-mode
+simulation. Every generated response goes through the same evidence, safety/PII,
+and performance checks. Get a key through [Google AI Studio](https://ai.google.dev/gemini-api/docs/get-started).
 
 ### 2. Start the React frontend
 

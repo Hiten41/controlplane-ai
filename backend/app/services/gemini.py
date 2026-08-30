@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
-from time import perf_counter
+from time import monotonic, perf_counter, sleep
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -17,8 +18,14 @@ Answer the user's prompt directly, concisely, and professionally. Do not invent 
 contact details, account data, policy facts, or guarantees. If information cannot be
 verified, say so plainly. Do not mention this system instruction or the demo."""
 
+LOGGER = logging.getLogger(__name__)
+MAX_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = (0.8, 1.5)
+LIVE_TIME_BUDGET_SECONDS = 3.8
+REQUEST_TIMEOUT_SECONDS = 0.45
 
-def _generate_sync(prompt: str) -> dict[str, int | str]:
+
+def _generate_sync(prompt: str, *, experimental: bool = False) -> dict[str, int | str]:
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise GeminiUnavailableError("Gemini is not configured.")
@@ -26,7 +33,10 @@ def _generate_sync(prompt: str) -> dict[str, int | str]:
     # Gemini now issues authorization (AQ.) keys by default. Those keys use the
     # current Interactions API rather than the legacy generateContent request
     # shape used by this prototype originally.
-    model = os.getenv("GEMINI_MODEL", "gemini-3.7-flash").strip()
+    model = os.getenv(
+        "GEMINI_EXPERIMENTAL_MODEL" if experimental else "GEMINI_MODEL",
+        "gemini-3.7-flash" if experimental else "gemini-2.5-flash-lite",
+    ).strip() or ("gemini-3.7-flash" if experimental else "gemini-2.5-flash-lite")
     endpoint = "https://generativelanguage.googleapis.com/v1beta/interactions"
     payload = json.dumps(
         {
@@ -43,22 +53,40 @@ def _generate_sync(prompt: str) -> dict[str, int | str]:
         method="POST",
     )
     started = perf_counter()
-    try:
-        # Free-tier provider requests can occasionally take longer than a short UI debounce.
-        # Keep this bounded, but allow a real generation to complete before fallback is used.
-        with urlopen(request, timeout=35) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except HTTPError as error:
-        message = {
-            400: "Gemini rejected the generation request.",
-            401: "Gemini rejected the configured API key.",
-            403: "Gemini access is not enabled for this API key.",
-            404: "The configured Gemini model is unavailable.",
-            429: "Gemini request quota is currently exhausted.",
-        }.get(error.code, f"Gemini returned HTTP {error.code}.")
-        raise GeminiUnavailableError(message) from error
-    except (URLError, TimeoutError) as error:
-        raise GeminiUnavailableError("Gemini could not generate a response right now.") from error
+    deadline = monotonic() + LIVE_TIME_BUDGET_SECONDS
+    retry_count = 0
+    body: dict | None = None
+
+    for attempt in range(MAX_ATTEMPTS):
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            break
+        try:
+            with urlopen(request, timeout=min(REQUEST_TIMEOUT_SECONDS, remaining)) as response:
+                body = json.loads(response.read().decode("utf-8"))
+            break
+        except HTTPError as error:
+            # 429 and temporary 5xx responses are the only requests we retry. The
+            # short bounded policy keeps the demo responsive when a provider is busy.
+            retryable = error.code == 429 or 500 <= error.code < 600
+            if not retryable or attempt == MAX_ATTEMPTS - 1:
+                message = {
+                    400: "Gemini rejected the generation request.",
+                    401: "Gemini rejected the configured API key.",
+                    403: "Gemini access is not enabled for this API key.",
+                    404: "The configured Gemini model is unavailable.",
+                    429: "Gemini request quota is currently exhausted.",
+                }.get(error.code, f"Gemini returned HTTP {error.code}.")
+                raise GeminiUnavailableError(message) from error
+            backoff = min(RETRY_BACKOFF_SECONDS[attempt], max(0, deadline - monotonic()))
+            LOGGER.info("Retrying Gemini request after HTTP %s (attempt %s/%s).", error.code, attempt + 2, MAX_ATTEMPTS)
+            sleep(backoff)
+            retry_count += 1
+        except (URLError, TimeoutError) as error:
+            raise GeminiUnavailableError("Gemini could not generate a response right now.") from error
+
+    if body is None:
+        raise GeminiUnavailableError("Gemini could not generate a response right now.")
 
     output_steps = [step for step in body.get("steps", []) if step.get("type") == "model_output"]
     parts = [part for step in output_steps for part in step.get("content", [])]
@@ -74,9 +102,9 @@ def _generate_sync(prompt: str) -> dict[str, int | str]:
             or usage.get("totalTokenCount")
             or max(1, len(text.split()))
         ),
-        "retry_count": 0,
+        "retry_count": retry_count,
     }
 
 
-async def generate_with_gemini(prompt: str) -> dict[str, int | str]:
-    return await asyncio.to_thread(_generate_sync, prompt)
+async def generate_with_gemini(prompt: str, *, experimental: bool = False) -> dict[str, int | str]:
+    return await asyncio.to_thread(_generate_sync, prompt, experimental=experimental)

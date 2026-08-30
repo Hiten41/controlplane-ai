@@ -19,7 +19,7 @@ export const api = {
   getScenarios: () => request<Scenario[]>("/scenarios"),
   getAudits: () => request<Audit[]>("/audits"),
   getReviews: () => request<Audit[]>("/reviews"),
-  generate: (prompt: string) => request<GeneratedResponse>("/generate", { method: "POST", body: JSON.stringify({ prompt }) }),
+  generate: (prompt: string, experimental = false) => request<GeneratedResponse>("/generate", { method: "POST", body: JSON.stringify({ prompt, experimental }) }),
   evaluate: (payload: { use_case: UseCase; prompt: string; response: string; telemetry: Scenario["telemetry"] }) =>
     request<Evaluation>("/evaluate", { method: "POST", body: JSON.stringify(payload) }),
   review: (auditId: string, action: "APPROVED" | "OVERRIDDEN", reviewerId: string, overrideReason: string) =>

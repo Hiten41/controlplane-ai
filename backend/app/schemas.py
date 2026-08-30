@@ -24,6 +24,7 @@ class EvaluateRequest(BaseModel):
 
 class GenerateRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=5000)
+    experimental: bool = False
 
 
 class GenerateResponse(BaseModel):
