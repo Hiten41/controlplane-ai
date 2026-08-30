@@ -22,7 +22,9 @@ LOGGER = logging.getLogger(__name__)
 MAX_ATTEMPTS = 3
 RETRY_BACKOFF_SECONDS = (0.8, 1.5)
 LIVE_TIME_BUDGET_SECONDS = 3.8
-REQUEST_TIMEOUT_SECONDS = 0.45
+# Live mode is opt-in. Give one real model completion enough room to return,
+# while the shared 3.8-second deadline still guarantees a quick demo fallback.
+REQUEST_TIMEOUT_SECONDS = 3.2
 
 
 def _generate_sync(prompt: str, *, experimental: bool = False) -> dict[str, int | str]:
