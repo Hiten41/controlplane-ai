@@ -279,6 +279,30 @@ Open `http://127.0.0.1:5173`.
 
 ## Test and build
 
+## Competition-readiness extensions
+
+### Automatic risk detection and context
+
+The main **Try your own** path does not ask an operator to classify a response as PII, bias, hallucination, or cost risk. The pipeline detects groundedness, structured PII, configured bias/safety patterns, and telemetry pressure in parallel. Demo Scenarios remain only as a fast way to demonstrate known cases.
+
+Each evaluation records an explicit policy context: use case, region label, risk appetite, and policy version. Region is contextual metadata in this prototype, not a legal or compliance determination. `strict` and `cautious` risk appetite settings make the policy threshold/action more conservative in a visible, inspectable way.
+
+### Sessions, feedback, and RBAC simulation
+
+An optional session ID associates ordered evaluations and shows cumulative risk: subsequent turns can make visible that a user is relying on a prior risky claim. This is deliberately lightweight session context, not an agent framework.
+
+The prototype role model is backend-enforced: Operators/Admins run evaluations; Reviewers/Admins resolve review cases; Auditors/Admins read audit material. There is no production authentication or identity provider. Review analytics report totals, override rate, override groupings, and a tuning recommendation; feedback never modifies policy automatically.
+
+### Reproducible evaluation benchmark
+
+`backend/app/services/benchmark.py` creates a 96-case synthetic labelled corpus covering supported answers, unsupported claims, PII, expanded bias patterns, overlap, insufficient evidence, performance, and all three policy profiles. Every case runs through the real evaluator with persistence disabled. Metrics are calculated from outputs—not embedded as frontend constants.
+
+On the current local run: **96 cases, 88 correct, 91.7% accuracy, 100.0% precision, 94.4% recall, 0 false positives, and 4 false negatives**. The UI can re-run this corpus and display fresh measurements. Results will vary slightly in latency by machine; the corpus and decision logic are deterministic.
+
+### Limitations
+
+Bias checks are transparent, configured patterns for age, gender, disability, protected-group stereotypes, and hiring discrimination. They are not comprehensive fairness detection. The benchmark is synthetic and evaluates prototype behaviour, not production-world safety. RBAC is a role simulation; production deployment needs authentication, authorization, encrypted audit retention, governed connectors, monitoring, and independent evaluation.
+
 ### Backend tests
 
 ```powershell

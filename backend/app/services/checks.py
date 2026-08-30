@@ -18,6 +18,10 @@ NAME_PATTERN = re.compile(r"\b[A-Z][a-z]{1,30}\s+[A-Z][a-z]{1,30}\b")
 UNSAFE_PATTERNS = {
     "age_bias": re.compile(r"avoid hiring older workers|older workers.*adapt poorly", re.IGNORECASE),
     "harmful_advice": re.compile(r"ignore safety|bypass security|harm yourself", re.IGNORECASE),
+    "gender_stereotyping": re.compile(r"women are too emotional|men are naturally better|female.*not suited|male.*better leader", re.IGNORECASE),
+    "disability_discrimination": re.compile(r"avoid.*disab|disabled.*cannot|wheelchair.*not fit", re.IGNORECASE),
+    "protected_group_stereotyping": re.compile(r"people from .* are (?:lazy|unreliable|less capable)|religion.*not fit", re.IGNORECASE),
+    "hiring_discrimination": re.compile(r"do not hire .* because (?:of|they are)|reject .* due to (?:age|gender|disability)", re.IGNORECASE),
 }
 SENSITIVE_PATTERNS = {
     "sensitive_hr_data": re.compile(r"salary|earns?\s+(?:inr|\$)|disciplinary warning|disciplinary note", re.IGNORECASE),
@@ -151,7 +155,7 @@ def _safety_pii_sync(response: str) -> CheckResult:
     unique_flags = list(dict.fromkeys(flags))
     if unique_flags:
         score = min(1.0, 0.35 + 0.2 * len(set(unique_flags)))
-        severity = "high" if any(flag.startswith("pii_") for flag in unique_flags) else "medium"
+        severity = "high" if any(flag.startswith("pii_") or flag in {"hiring_discrimination", "disability_discrimination"} for flag in unique_flags) else "medium"
         reason = "Detected " + ", ".join(flag.replace("_", " ") for flag in unique_flags) + "."
         status = "risk_detected"
     else:
@@ -171,6 +175,7 @@ def _safety_pii_sync(response: str) -> CheckResult:
             "flags": unique_flags,
             "pii_detected": pii_detected,
             "severity": severity,
+            "bias_categories": [flag for flag in unique_flags if flag in {"age_bias", "gender_stereotyping", "disability_discrimination", "protected_group_stereotyping", "hiring_discrimination"}],
             "assessment_method": "configured_pattern_rules",
         },
     )

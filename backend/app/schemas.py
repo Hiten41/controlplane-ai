@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 
 Decision = Literal["ALLOW", "AUTO_EDIT", "FLAG_FOR_HUMAN_REVIEW", "BLOCK"]
 ReleaseStatus = Literal["RELEASED", "WITHHELD", "PENDING_REVIEW"]
+Role = Literal["operator", "reviewer", "auditor", "admin"]
+Region = Literal["global", "EU", "US", "IN"]
+RiskAppetite = Literal["balanced", "strict", "cautious"]
 
 
 class TelemetryInput(BaseModel):
@@ -20,6 +23,10 @@ class EvaluateRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=5000)
     response: str = Field(min_length=1, max_length=8000)
     telemetry: TelemetryInput | None = None
+    region: Region = "global"
+    risk_appetite: RiskAppetite = "balanced"
+    session_id: str | None = Field(default=None, max_length=100)
+    actor_role: Role = "operator"
 
 
 class GenerateRequest(BaseModel):
@@ -39,6 +46,14 @@ class ReviewRequest(BaseModel):
     reviewer_id: str = Field(min_length=1, max_length=100)
     action: Literal["APPROVED", "OVERRIDDEN"]
     override_reason: str | None = Field(default=None, max_length=1000)
+    actor_role: Role = "reviewer"
+
+
+class PolicyContext(BaseModel):
+    use_case: str
+    region: Region
+    risk_appetite: RiskAppetite
+    policy_version: str
 
 
 class CheckResult(BaseModel):
@@ -75,3 +90,6 @@ class EvaluateResponse(BaseModel):
     total_check_latency_ms: int
     review_required: bool
     created_at: str
+    policy_context: PolicyContext
+    session_id: str | None = None
+    session_risk: dict[str, Any] | None = None

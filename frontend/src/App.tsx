@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { api } from "./api";
 import { demoPolicies, demoScenarios } from "./demoCatalog";
 import { generateSandboxResponse } from "./sandboxGeneration";
-import type { Audit, Check, Evaluation, Policy, Scenario, Telemetry, UseCase } from "./types";
+import type { Audit, Check, Evaluation, Metrics, Policy, Role, Scenario, Telemetry, UseCase } from "./types";
 
 const useCaseOrder: UseCase[] = ["customer_support", "internal_knowledge_assistant", "decision_support"];
 
@@ -149,6 +149,12 @@ function App() {
   const [policies, setPolicies] = useState<Record<UseCase, Policy> | null>(demoPolicies);
   const [scenarios, setScenarios] = useState<Scenario[]>(demoScenarios);
   const [useCase, setUseCase] = useState<UseCase>("customer_support");
+  const [region, setRegion] = useState("global");
+  const [riskAppetite, setRiskAppetite] = useState("balanced");
+  const [role, setRole] = useState<Role>("operator");
+  const [sessionId, setSessionId] = useState("");
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [performanceMetrics, setPerformanceMetrics] = useState<{ sequential_latency_ms: number; concurrent_latency_ms: number; improvement_percent: number } | null>(null);
   const [scenarioId, setScenarioId] = useState("clean_answer");
   const [customPrompt, setCustomPrompt] = useState("How long will delivery take?");
   const [customResponse, setCustomResponse] = useState("Standard delivery takes 3 to 5 business days.");
@@ -188,7 +194,7 @@ function App() {
   }), [audits]);
 
   async function refreshRecords() {
-    const [nextAudits, nextReviews] = await Promise.all([api.getAudits(), api.getReviews()]);
+    const [nextAudits, nextReviews] = await Promise.all([api.getAudits(role === "operator" ? "auditor" : role), api.getReviews(role === "operator" ? "reviewer" : role)]);
     setAudits(nextAudits);
     setReviews(nextReviews);
   }
@@ -210,7 +216,7 @@ function App() {
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [role]);
 
   useEffect(() => {
     const targetId = window.location.hash.slice(1);
@@ -275,7 +281,7 @@ function App() {
       setEvaluationMessage("Waking the free demo API — please keep this page open (up to 60 sec on first visit)...");
     }, 8000);
     try {
-      const nextResult = await api.evaluate({ use_case: useCase, ...payload });
+      const nextResult = await api.evaluate({ use_case: useCase, ...payload, region, risk_appetite: riskAppetite, session_id: sessionId.trim() || undefined, actor_role: role });
       setResult(nextResult);
       setEvaluationPhase("complete");
       await refreshRecords();
@@ -319,6 +325,14 @@ function App() {
         <p>Choose the policy context and a test signal. The engine checks evidence, safety, and operational cost in parallel before it releases, edits, holds, or blocks the response.</p>
       </section>
 
+      <section className="context-bar" aria-label="Active policy context">
+        <div><span>Role</span><select value={role} onChange={(event) => setRole(event.target.value as Role)}><option value="operator">Operator</option><option value="reviewer">Reviewer</option><option value="auditor">Auditor</option><option value="admin">Admin</option></select></div>
+        <div><span>Region</span><select value={region} onChange={(event) => setRegion(event.target.value)}><option value="global">Global</option><option value="EU">EU</option><option value="US">US</option><option value="IN">India</option></select></div>
+        <div><span>Risk appetite</span><select value={riskAppetite} onChange={(event) => setRiskAppetite(event.target.value)}><option value="balanced">Balanced</option><option value="cautious">Cautious</option><option value="strict">Strict</option></select></div>
+        <label><span>Session ID <small>(optional)</small></span><input value={sessionId} onChange={(event) => setSessionId(event.target.value)} placeholder="demo-session-01" /></label>
+        <p>Context informs the active policy; region alone makes no compliance claim.</p>
+      </section>
+
       {error && <div className="alert" role="alert"><span>{error}</span><button onClick={() => void loadData()}>Retry connection</button></div>}
 
       <section className="workspace" id="evaluation-console">
@@ -340,7 +354,7 @@ function App() {
         </div>
 
         <div className="panel panel--scenario">
-          <div className="section-title"><div><p>RESPONSE GATE</p><h2>Choose a test signal</h2></div><span className="scenario-count">{scenarios.length || 6} test cases</span></div>
+          <div className="section-title"><div><p>LIVE EVALUATION</p><h2>Demo scenarios</h2></div><span className="scenario-count">Predefined examples · {scenarios.length || 6} cases</span></div>
           <div className="scenario-deck" aria-label="Demo scenarios">
             {scenarios.map((scenario) => {
               const meta = scenarioMeta[scenario.id] ?? { signal: "Scenario", description: scenario.label, tone: "clear" as const };
@@ -356,7 +370,7 @@ function App() {
             <div className="telemetry-inputs"><label>Latency (ms)<input type="number" value={customTelemetry.latency_ms} readOnly aria-readonly="true" /></label><label>Tokens<input type="number" value={customTelemetry.token_count} readOnly aria-readonly="true" /></label><label>Retries<input type="number" value={customTelemetry.retry_count} readOnly aria-readonly="true" /></label></div>
           </div> : <><div className="content-grid"><div><span className="content-label">User prompt</span><p>{activeScenario?.prompt ?? "Loading..."}</p></div><div><span className="content-label">Simulated AI response</span><p>{activeScenario?.response ?? "Loading..."}</p></div></div>{activeScenario && <div className="fixture-tools"><p className="fixture-meta">Fixture telemetry · {activeScenario.telemetry.latency_ms}ms · {activeScenario.telemetry.token_count} tokens · {activeScenario.telemetry.retry_count} retries</p><button className="text-button" onClick={loadFixtureIntoSandbox}>Edit in sandbox</button></div>}</>}
           <ol className={`evaluation-pipeline evaluation-pipeline--${evaluationPhase}`} aria-label="Evaluation pipeline"><li><span></span><div><b>Evidence</b><small>Approved-source match</small></div></li><li><span></span><div><b>Safety</b><small>PII, bias, unsafe content</small></div></li><li><span></span><div><b>Performance</b><small>Latency, tokens, retries</small></div></li></ol>
-          <button className="evaluate" onClick={() => void runEvaluation()} disabled={isEvaluating || isGeneratingResponse || (!isCustom && !activeScenario)}>{isEvaluating ? evaluationMessage : isGeneratingResponse ? "Generating demo response..." : "Check response"}</button>
+          <button className="evaluate" onClick={() => void runEvaluation()} disabled={isEvaluating || isGeneratingResponse || role === "auditor" || role === "reviewer" || (!isCustom && !activeScenario)}>{isEvaluating ? evaluationMessage : isGeneratingResponse ? "Generating demo response..." : "Evaluate automatically"}</button>
           {isEvaluating && <p className="evaluation-hint" role="status">The response remains held until the policy decision is complete.</p>}
         </div>
       </section>
@@ -364,6 +378,8 @@ function App() {
       {result && <section className="result-section" id="control-tower-results" key={result.audit_id}>
         <div className="section-title"><div><p>DECISION ENGINE</p><h2>Release decision</h2></div><span className="result-time">TOTAL {result.total_check_latency_ms}ms</span></div>
         <ControlTower result={result} />
+        <section className="risk-summary"><div><span>Detected risks</span><h3>Independent checks and evidence</h3></div>{result.checks.map((check) => <article key={check.name}><b>{pretty(check.name)}</b><strong>{check.details.severity ? String(check.details.severity).toUpperCase() : statusLabel(check.status)}</strong><span>Score {Math.round(check.score * 100)} · Confidence {Math.round(check.confidence * 100)}%</span><p>{check.reason}</p></article>)}</section>
+        {result.policy_context && <div className="context-result"><span>Active policy context</span><b>{pretty(result.policy_context.use_case)} · {result.policy_context.region} · {pretty(result.policy_context.risk_appetite)} · v{result.policy_context.policy_version}</b>{result.session_risk && <p>Session: {result.session_risk.turn_count} turns · {result.session_risk.risk_turn_count} risk turns · cumulative {result.session_risk.cumulative_severity} risk.</p>}</div>}
         <div className="result-layout">
           <div className="decision-panel">
             <div className={decisionClass(result.decision)}>{pretty(result.decision)}</div><h3>{result.decision_reason}</h3>
@@ -405,6 +421,8 @@ function App() {
           {audits.length > 0 && visibleAudits.length === 0 && <div className="empty-state"><span>No matching records</span><p>Try a different policy filter.</p></div>}
         </div>
       </section>
+
+      <section className="panel metrics-panel" id="evaluation-metrics"><div className="section-title"><div><p>EVALUATION / METRICS</p><h2>Measured benchmark and performance</h2></div><button className="text-button" onClick={() => Promise.all([api.getMetrics(), api.getPerformance()]).then(([nextMetrics, nextPerformance]) => { setMetrics(nextMetrics); setPerformanceMetrics(nextPerformance); }).catch(() => setError("Metrics could not be loaded."))}>Run benchmark</button></div>{metrics ? <><div className="metrics-grid"><div><b>{metrics.total_cases}</b><span>Labeled cases</span></div><div><b>{(metrics.accuracy * 100).toFixed(1)}%</b><span>Accuracy</span></div><div><b>{(metrics.precision * 100).toFixed(1)}%</b><span>Precision</span></div><div><b>{(metrics.recall * 100).toFixed(1)}%</b><span>Recall</span></div><div><b>{metrics.p95_latency_ms}ms</b><span>p95 pipeline latency</span></div></div><p className="metrics-note">Real pipeline run: {metrics.correct_decisions}/{metrics.total_cases} correct · FP {metrics.false_positives} · FN {metrics.false_negatives}. {performanceMetrics && `Parallel ${performanceMetrics.concurrent_latency_ms}ms vs sequential ${performanceMetrics.sequential_latency_ms}ms (${performanceMetrics.improvement_percent}% improvement).`}</p></> : <div className="empty-state"><span>Benchmark not run this session</span><p>Runs the synthetic labelled corpus through the real policy pipeline—no invented metrics.</p></div>}</section>
 
       <footer><span>ControlPlane.ai</span> · Policy-driven responsible AI infrastructure · Prototype data only</footer>
     </main>

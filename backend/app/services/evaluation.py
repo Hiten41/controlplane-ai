@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 from time import perf_counter
 
 from app.config import get_policies
-from app.database import save_audit
-from app.schemas import EvaluateRequest, EvaluateResponse
+from app.database import save_audit, session_summary
+from app.schemas import EvaluateRequest, EvaluateResponse, PolicyContext
 from app.services.checks import cost_performance_check, default_telemetry, groundedness_check, safety_pii_check
 from app.services.policy_engine import decide
 
@@ -20,7 +20,15 @@ async def _timed_check(coroutine):
 
 
 async def evaluate(request: EvaluateRequest, persist: bool = True) -> EvaluateResponse:
-    policy = get_policies()[request.use_case]
+    policy = {**get_policies()[request.use_case]}
+    # Region is visible context only in this prototype. Risk appetite is a
+    # transparent simulation of stricter internal release policy, not legal advice.
+    if request.risk_appetite == "strict":
+        policy["minimum_groundedness_score"] = min(0.95, policy["minimum_groundedness_score"] + 0.1)
+        if policy["unsupported_claim_action"] == "AUTO_EDIT":
+            policy["unsupported_claim_action"] = "FLAG_FOR_HUMAN_REVIEW"
+    elif request.risk_appetite == "cautious" and policy["unsupported_claim_action"] == "AUTO_EDIT":
+        policy["unsupported_claim_action"] = "FLAG_FOR_HUMAN_REVIEW"
     telemetry = request.telemetry or default_telemetry(request.response)
     check_started = perf_counter()
     checks = list(
@@ -42,6 +50,9 @@ async def evaluate(request: EvaluateRequest, persist: bool = True) -> EvaluateRe
             "audit_id": audit_id,
             "created_at": created_at,
             "use_case": request.use_case,
+            "region": request.region,
+            "risk_appetite": request.risk_appetite,
+            "session_id": request.session_id,
             "policy_version_used": policy["version"],
             "input_prompt": request.prompt,
             "ai_response": request.response,
@@ -66,6 +77,7 @@ async def evaluate(request: EvaluateRequest, persist: bool = True) -> EvaluateRe
     }
     if persist:
         save_audit(record)
+    session_risk = session_summary(request.session_id) if request.session_id and persist else None
     return EvaluateResponse(
         audit_id=audit_id,
         use_case=request.use_case,
@@ -80,4 +92,7 @@ async def evaluate(request: EvaluateRequest, persist: bool = True) -> EvaluateRe
         total_check_latency_ms=total_check_latency_ms,
         review_required=outcome.decision == "FLAG_FOR_HUMAN_REVIEW",
         created_at=created_at,
+        policy_context=PolicyContext(use_case=request.use_case, region=request.region, risk_appetite=request.risk_appetite, policy_version=policy["version"]),
+        session_id=request.session_id,
+        session_risk=session_risk,
     )

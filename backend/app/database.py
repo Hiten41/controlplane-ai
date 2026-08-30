@@ -65,6 +65,9 @@ def initialize_database() -> None:
                 reviewer_id TEXT,
                 reviewer_action TEXT,
                 override_reason TEXT
+                ,region TEXT NOT NULL DEFAULT 'global'
+                ,risk_appetite TEXT NOT NULL DEFAULT 'balanced'
+                ,session_id TEXT
             );
             CREATE TABLE IF NOT EXISTS review_cases (
                 audit_id TEXT PRIMARY KEY,
@@ -91,6 +94,9 @@ def initialize_database() -> None:
         _ensure_column(connection, "audits", "end_user_response", "TEXT")
         _ensure_column(connection, "audits", "release_status", "TEXT NOT NULL DEFAULT 'WITHHELD'")
         _ensure_column(connection, "audits", "decision_trace", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(connection, "audits", "region", "TEXT NOT NULL DEFAULT 'global'")
+        _ensure_column(connection, "audits", "risk_appetite", "TEXT NOT NULL DEFAULT 'balanced'")
+        _ensure_column(connection, "audits", "session_id", "TEXT")
         # Normalize records created before release state became explicit. This
         # prevents legacy held content from being represented as user output.
         connection.execute(
@@ -122,6 +128,7 @@ def save_audit(record: dict) -> None:
         "groundedness_confidence", "groundedness_status", "groundedness_evidence", "safety_score",
         "safety_flags", "pii_detected", "cost_latency_ms", "cost_token_count", "retry_count",
         "cost_budget_breached", "final_decision", "decision_reason", "decision_trace", "flagged_spans",
+        "region", "risk_appetite", "session_id",
     ]
     serialised = record.copy()
     for field in ["groundedness_evidence", "safety_flags", "pii_detected", "decision_trace", "flagged_spans"]:
@@ -205,3 +212,43 @@ def resolve_review(audit_id: str, reviewer_id: str, action: str, override_reason
         )
         row = connection.execute("SELECT * FROM audits WHERE audit_id = ?", (audit_id,)).fetchone()
     return _decode_audit(row)
+
+
+def session_summary(session_id: str) -> dict:
+    """Return lightweight ordered risk context for a conversation session."""
+    initialize_database()
+    with _connection() as connection:
+        rows = connection.execute(
+            "SELECT created_at, final_decision, safety_flags, groundedness_status, decision_reason FROM audits WHERE session_id = ? ORDER BY created_at",
+            (session_id,),
+        ).fetchall()
+    records = [dict(row) for row in rows]
+    risk_turns = [record for record in records if record["final_decision"] != "ALLOW"]
+    return {
+        "session_id": session_id,
+        "turn_count": len(records),
+        "risk_turn_count": len(risk_turns),
+        "cumulative_severity": "high" if len(risk_turns) >= 2 else "medium" if risk_turns else "low",
+        "prior_risks": [record["decision_reason"] for record in risk_turns[-3:]],
+    }
+
+
+def feedback_analytics() -> dict:
+    initialize_database()
+    with _connection() as connection:
+        total = connection.execute("SELECT COUNT(*) FROM review_cases").fetchone()[0]
+        overrides = connection.execute("SELECT COUNT(*) FROM review_cases WHERE status = 'OVERRIDDEN'").fetchone()[0]
+        detector_rows = connection.execute("SELECT safety_flags FROM audits WHERE reviewer_action = 'OVERRIDDEN'").fetchall()
+        policy_rows = connection.execute("SELECT use_case, COUNT(*) AS count FROM audits WHERE reviewer_action = 'OVERRIDDEN' GROUP BY use_case").fetchall()
+    detector_counts: dict[str, int] = {}
+    for row in detector_rows:
+        for detector in json.loads(row["safety_flags"] or "[]"):
+            detector_counts[detector] = detector_counts.get(detector, 0) + 1
+    return {
+        "total_reviews": total,
+        "total_overrides": overrides,
+        "override_rate": round(overrides / total, 3) if total else 0.0,
+        "overrides_by_detector": detector_counts,
+        "overrides_by_policy": {row["use_case"]: row["count"] for row in policy_rows},
+        "tuning_recommended": bool(overrides >= 2),
+    }
