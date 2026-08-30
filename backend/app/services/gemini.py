@@ -26,7 +26,9 @@ REQUEST_TIMEOUT_SECONDS = 0.45
 
 
 def _generate_sync(prompt: str, *, experimental: bool = False) -> dict[str, int | str]:
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    # Google libraries honour GOOGLE_API_KEY before GEMINI_API_KEY. Follow the
+    # same order so a rotated deployment secret can take effect immediately.
+    api_key = os.getenv("GOOGLE_API_KEY", "").strip() or os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise GeminiUnavailableError("Gemini is not configured.")
 
@@ -35,8 +37,8 @@ def _generate_sync(prompt: str, *, experimental: bool = False) -> dict[str, int 
     # shape used by this prototype originally.
     model = os.getenv(
         "GEMINI_EXPERIMENTAL_MODEL" if experimental else "GEMINI_MODEL",
-        "gemini-3.7-flash" if experimental else "gemini-2.5-flash-lite",
-    ).strip() or ("gemini-3.7-flash" if experimental else "gemini-2.5-flash-lite")
+        "gemini-3.7-flash" if experimental else "gemini-3.5-flash-lite",
+    ).strip() or ("gemini-3.7-flash" if experimental else "gemini-3.5-flash-lite")
     endpoint = "https://generativelanguage.googleapis.com/v1beta/interactions"
     payload = json.dumps(
         {

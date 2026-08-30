@@ -250,15 +250,16 @@ frontend or GitHub repository):
 
 ```env
 GEMINI_API_KEY=your_key_from_google_ai_studio
+# GOOGLE_API_KEY is also supported and takes precedence during key rotation.
 # Optional. Stable live-demo model used by the opt-in sandbox toggle.
-GEMINI_MODEL=gemini-2.5-flash-lite
+GEMINI_MODEL=gemini-3.5-flash-lite
 # Optional. Kept separate for an experimental model path; never used by default.
 GEMINI_EXPERIMENTAL_MODEL=gemini-3.7-flash
 ```
 
 The sandbox starts in **Simulated (demo mode)**: a local, deterministic response
 generator that is fast and reliable for judging. A judge can explicitly enable
-**Try live Gemini (experimental)** to request Gemini 2.5 Flash-Lite. Live calls
+**Try live Gemini (experimental)** to request Gemini 3.5 Flash-Lite. Live calls
 use at most two short retries for transient provider errors and a total budget
 below four seconds; any failure silently returns to the same labelled demo-mode
 simulation. Every generated response goes through the same evidence, safety/PII,
